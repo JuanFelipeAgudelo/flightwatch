@@ -11,13 +11,21 @@ interface AeroDataBoxAirport {
 
 interface AeroDataBoxLeg {
   airport: AeroDataBoxAirport;
-  scheduledTime?: { local: string };
+  scheduledTime?: { local: string; utc: string };
   // AeroDataBox uses different field names depending on the airport/flight quality tier —
   // check both rather than assuming one.
-  revisedTime?: { local: string };
-  predictedTime?: { local: string };
+  revisedTime?: { local: string; utc: string };
+  predictedTime?: { local: string; utc: string };
   terminal?: string;
   gate?: string;
+}
+
+// AeroDataBox returns UTC as "2026-07-24 00:30Z" — reshape to a standard ISO
+// instant ("2026-07-24T00:30:00Z") so `new Date(...)` parses it reliably everywhere.
+function toIsoUtc(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})Z$/);
+  return match ? `${match[1]}T${match[2]}:00Z` : null;
 }
 
 interface AeroDataBoxFlight {
@@ -63,6 +71,8 @@ export async function fetchFlightStatus(
       timeZone: f.departure.airport.timeZone ?? null,
       scheduledTime: f.departure.scheduledTime?.local ?? null,
       estimatedTime: f.departure.revisedTime?.local ?? f.departure.predictedTime?.local ?? null,
+      scheduledTimeUtc: toIsoUtc(f.departure.scheduledTime?.utc),
+      estimatedTimeUtc: toIsoUtc(f.departure.revisedTime?.utc ?? f.departure.predictedTime?.utc),
       terminal: f.departure.terminal ?? null,
       gate: f.departure.gate ?? null,
     },
@@ -72,6 +82,8 @@ export async function fetchFlightStatus(
       timeZone: f.arrival.airport.timeZone ?? null,
       scheduledTime: f.arrival.scheduledTime?.local ?? null,
       estimatedTime: f.arrival.revisedTime?.local ?? f.arrival.predictedTime?.local ?? null,
+      scheduledTimeUtc: toIsoUtc(f.arrival.scheduledTime?.utc),
+      estimatedTimeUtc: toIsoUtc(f.arrival.revisedTime?.utc ?? f.arrival.predictedTime?.utc),
       terminal: f.arrival.terminal ?? null,
       gate: f.arrival.gate ?? null,
     },

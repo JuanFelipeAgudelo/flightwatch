@@ -58,6 +58,66 @@ function renderLegLabel(direction, leg) {
   return `<span class="leg-dir">${direction}${code}</span> <span class="leg-airport-name">${leg.airport}</span>`;
 }
 
+function formatDuration(ms) {
+  const totalMinutes = Math.round(Math.abs(ms) / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+// Picks the next meaningful milestone (departure or arrival) and how far away it is,
+// based on real UTC instants rather than the status text (which varies a lot API-side).
+function nextEventInfo(status) {
+  const depUtc = status.departure.estimatedTimeUtc ?? status.departure.scheduledTimeUtc;
+  const arrUtc = status.arrival.estimatedTimeUtc ?? status.arrival.scheduledTimeUtc;
+  if (!depUtc && !arrUtc) return null;
+
+  const now = Date.now();
+  const dep = depUtc ? new Date(depUtc).getTime() : null;
+  const arr = arrUtc ? new Date(arrUtc).getTime() : null;
+
+  if (dep !== null && now < dep) {
+    return { label: "Departs", diff: dep - now };
+  }
+  if (arr !== null && now < arr) {
+    return { label: "Lands", diff: arr - now };
+  }
+  if (arr !== null) {
+    return { label: "Landed", diff: now - arr, past: true };
+  }
+  return null;
+}
+
+function renderNextEvent(status) {
+  const info = nextEventInfo(status);
+  if (!info) return "";
+  const text = info.past ? `${info.label} ${formatDuration(info.diff)} ago` : `${info.label} in ${formatDuration(info.diff)}`;
+  return `<span class="next-event" data-target-diff="${info.diff}" data-label="${info.label}" data-past="${!!info.past}">${text}</span>`;
+}
+
+// Re-render just the countdown text every 30s, without rebuilding the whole board
+// (avoids re-triggering flap-in animations on rows that haven't actually changed).
+function tickCountdowns() {
+  document.querySelectorAll(".next-event").forEach((el) => {
+    const wasPast = el.dataset.past === "true";
+    // We don't have live "now" tracking per-row without re-fetching, so just nudge
+    // the displayed diff forward by the tick interval for a live-feeling countdown.
+    let diff = Number(el.dataset.targetDiff);
+    diff = wasPast ? diff + 30000 : diff - 30000;
+    el.dataset.targetDiff = diff;
+    const label = el.dataset.label;
+    if (!wasPast && diff <= 0) {
+      // Crossed the milestone — a full reload will pick up the correct next stage.
+      loadFlights();
+      return;
+    }
+    el.textContent = wasPast ? `${label} ${formatDuration(diff)} ago` : `${label} in ${formatDuration(diff)}`;
+  });
+}
+
 const form = document.getElementById("add-form");
 const numberInput = document.getElementById("flight-number");
 const dateInput = document.getElementById("flight-date");
@@ -104,6 +164,7 @@ function renderFlights(entries) {
         </div>
       ` : `<p class="hint" style="margin:8px 0 0;">No status yet — check back in a few minutes.</p>`}
       <div class="row-footer">
+        ${status ? renderNextEvent(status) : "<span></span>"}
         <button class="remove-btn" data-number="${flight.flightNumber}" data-date="${flight.date}">Remove</button>
       </div>
     `;
@@ -144,3 +205,4 @@ form.addEventListener("submit", async (e) => {
 });
 
 loadFlights();
+setInterval(tickCountdowns, 30000);

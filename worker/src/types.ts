@@ -20,6 +20,8 @@ export interface FlightStatus {
     timeZone: string | null; // IANA, e.g. "America/New_York"
     scheduledTime: string | null;
     estimatedTime: string | null;
+    scheduledTimeUtc: string | null; // ISO instant, for real time-math (countdowns etc.)
+    estimatedTimeUtc: string | null;
     terminal: string | null;
     gate: string | null;
   };
@@ -29,6 +31,8 @@ export interface FlightStatus {
     timeZone: string | null;
     scheduledTime: string | null;
     estimatedTime: string | null;
+    scheduledTimeUtc: string | null;
+    estimatedTimeUtc: string | null;
     terminal: string | null;
     gate: string | null;
   };

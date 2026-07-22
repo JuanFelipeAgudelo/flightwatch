@@ -346,8 +346,20 @@
 
     .row-footer {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: baseline;
       margin-top: 10px;
+    }
+
+    .next-event {
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--cyan);
+    }
+
+    .next-event[data-past="true"] {
+      color: var(--paper-dim);
     }
 
     .remove-btn {
