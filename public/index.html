@@ -54,6 +54,7 @@
 
     html, body {
       height: 100%;
+      overscroll-behavior-y: contain;
     }
 
     body {
@@ -100,6 +101,52 @@
       max-width: 560px;
       margin: 0 auto;
       padding: 32px 18px 90px;
+    }
+
+    #pull-refresh {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 56px;
+      transform: translateY(-56px);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--amber);
+      background: linear-gradient(to bottom, var(--board-bg) 60%, transparent);
+      pointer-events: none;
+    }
+
+    #pull-refresh.dragging { transition: none; }
+    #pull-refresh.settling { transition: transform 0.25s ease; }
+
+    #pull-refresh .pull-icon {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--amber-dim);
+      border-top-color: var(--amber);
+      border-radius: 50%;
+      transition: transform 0.15s ease;
+    }
+
+    #pull-refresh.ready .pull-icon {
+      transform: rotate(180deg);
+      border-top-color: var(--amber);
+    }
+
+    #pull-refresh.refreshing .pull-icon {
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     header.masthead {
@@ -399,6 +446,7 @@
   </style>
 </head>
 <body>
+  <div id="pull-refresh"><span class="pull-icon"></span><span class="pull-label">Pull to refresh</span></div>
   <main>
     <header class="masthead">
       <h1>FLIGHT<br />WATCH</h1>

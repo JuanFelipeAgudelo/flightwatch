@@ -206,3 +206,67 @@ form.addEventListener("submit", async (e) => {
 
 loadFlights();
 setInterval(tickCountdowns, 30000);
+
+// Custom pull-to-refresh — installed iOS PWAs run standalone with no browser chrome,
+// so there's no native pull-to-refresh gesture to rely on.
+(function setupPullToRefresh() {
+  const indicator = document.getElementById("pull-refresh");
+  const label = indicator.querySelector(".pull-label");
+  const THRESHOLD = 70;
+  const MAX_PULL = 110;
+
+  let startY = null;
+  let pulling = false;
+  let refreshing = false;
+
+  document.addEventListener(
+    "touchstart",
+    (e) => {
+      if (refreshing || window.scrollY > 0) return;
+      startY = e.touches[0].clientY;
+      pulling = true;
+      indicator.classList.remove("settling");
+      indicator.classList.add("dragging");
+    },
+    { passive: true }
+  );
+
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!pulling || startY === null || refreshing) return;
+      const delta = e.touches[0].clientY - startY;
+      if (delta <= 0) return;
+
+      const pull = Math.min(delta * 0.5, MAX_PULL);
+      indicator.style.transform = `translateY(${pull - 56}px)`;
+      indicator.classList.toggle("ready", pull >= THRESHOLD);
+      label.textContent = pull >= THRESHOLD ? "Release to refresh" : "Pull to refresh";
+    },
+    { passive: true }
+  );
+
+  document.addEventListener("touchend", () => {
+    if (!pulling || refreshing) return;
+    pulling = false;
+    indicator.classList.remove("dragging");
+    indicator.classList.add("settling");
+
+    if (indicator.classList.contains("ready")) {
+      refreshing = true;
+      indicator.classList.add("refreshing");
+      indicator.style.transform = "translateY(0px)";
+      label.textContent = "Refreshing…";
+      loadFlights().finally(() => {
+        setTimeout(() => {
+          indicator.style.transform = "translateY(-56px)";
+          indicator.classList.remove("ready", "refreshing");
+          refreshing = false;
+        }, 350);
+      });
+    } else {
+      indicator.style.transform = "translateY(-56px)";
+    }
+    startY = null;
+  });
+})();
