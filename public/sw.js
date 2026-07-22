@@ -1,6 +1,6 @@
 // Minimal service worker so the app is installable as a PWA.
 // No push handling here — notifications come from ntfy's own app, not this service worker.
-const CACHE_NAME = "flightwatch-v5";
+const CACHE_NAME = "flightwatch-v6";
 const CORE_ASSETS = ["/", "/index.html", "/app.js", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (event) => {

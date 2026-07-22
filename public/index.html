@@ -277,6 +277,7 @@
       display: flex;
       justify-content: space-between;
       align-items: baseline;
+      gap: 12px;
       font-size: 0.86rem;
       padding: 5px 0;
       border-top: 1px dashed var(--board-line);
@@ -290,19 +291,34 @@
     }
 
     .leg-label {
+      display: flex;
+      align-items: baseline;
+      gap: 0.4em;
+      min-width: 0;
       color: var(--paper-dim);
       letter-spacing: 0.03em;
     }
 
     .leg-dir {
+      flex: 0 0 auto;
       color: var(--amber);
       font-weight: 600;
       letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    .leg-airport-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .leg-value {
+      flex: 0 0 auto;
       display: inline-block;
       text-align: right;
+      white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
 

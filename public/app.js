@@ -55,7 +55,7 @@ function renderLegTime(leg) {
 
 function renderLegLabel(direction, leg) {
   const code = leg.airportCode ? ` ${leg.airportCode}` : "";
-  return `<span class="leg-dir">${direction}${code}</span> ${leg.airport}`;
+  return `<span class="leg-dir">${direction}${code}</span> <span class="leg-airport-name">${leg.airport}</span>`;
 }
 
 const form = document.getElementById("add-form");
