@@ -6,88 +6,349 @@
   <title>FlightWatch</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <meta name="theme-color" content="#0b1220" />
+  <meta name="theme-color" content="#0a0906" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --board-bg: #0a0906;
+      --board-panel: #14110b;
+      --board-line: #2b2418;
+      --amber: #ffb400;
+      --amber-dim: #8a6a1f;
+      --amber-glow: rgba(255, 180, 0, 0.35);
+      --cyan: #5fe0d0;
+      --red: #ff5b4d;
+      --paper: #e9dfc8;
+      --paper-dim: #9c9280;
+    }
+
     * { box-sizing: border-box; }
+
+    @keyframes flap-in {
+      0%   { opacity: 0; transform: scaleY(0.1) translateY(-6px); filter: blur(2px); }
+      55%  { opacity: 1; transform: scaleY(1.08) translateY(1px); filter: blur(0); }
+      100% { opacity: 1; transform: scaleY(1) translateY(0); }
+    }
+
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      92% { opacity: 1; }
+      93% { opacity: 0.6; }
+      94% { opacity: 1; }
+      96% { opacity: 0.75; }
+      97% { opacity: 1; }
+    }
+
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0.15; }
+    }
+
+    @keyframes scan {
+      0% { background-position: 0 0; }
+      100% { background-position: 0 40px; }
+    }
+
+    html, body {
+      height: 100%;
+    }
+
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: #0b1220;
-      color: #e6edf3;
       min-height: 100vh;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      background:
+        radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255,180,0,0.10), transparent 60%),
+        var(--board-bg);
+      color: var(--paper);
+      position: relative;
+      animation: flicker 7s infinite;
     }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.18) 0px,
+        rgba(0,0,0,0.18) 1px,
+        transparent 2px,
+        transparent 4px
+      );
+      mix-blend-mode: multiply;
+      opacity: 0.5;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 4;
+      box-shadow: inset 0 0 160px 40px rgba(0,0,0,0.7);
+    }
+
     main {
-      max-width: 480px;
+      position: relative;
+      z-index: 1;
+      max-width: 560px;
       margin: 0 auto;
-      padding: 24px 16px 80px;
+      padding: 32px 18px 90px;
     }
-    h1 { font-size: 1.4rem; margin-bottom: 4px; }
-    p.hint { color: #8b98a5; margin-top: 0; font-size: 0.9rem; }
+
+    header.masthead {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 3px solid var(--amber-dim);
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      font-family: "Big Shoulders Display", sans-serif;
+      font-weight: 900;
+      font-size: clamp(2.4rem, 9vw, 3.4rem);
+      letter-spacing: 0.02em;
+      line-height: 0.85;
+      margin: 0;
+      color: var(--amber);
+      text-shadow: 0 0 18px var(--amber-glow), 0 0 2px var(--amber-glow);
+    }
+
+    .clock-wrap {
+      text-align: right;
+      font-size: 0.72rem;
+      color: var(--paper-dim);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding-bottom: 6px;
+    }
+
+    #clock {
+      display: block;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 1.1rem;
+      color: var(--cyan);
+      letter-spacing: 0.08em;
+      margin-top: 2px;
+    }
+
+    .live-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+      margin-right: 6px;
+      animation: blink 1.6s steps(1) infinite;
+      box-shadow: 0 0 6px var(--red);
+    }
+
+    p.hint {
+      color: var(--paper-dim);
+      margin: 0 0 22px;
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+    }
+
     form {
       display: flex;
-      gap: 8px;
-      margin: 20px 0;
+      gap: 10px;
+      margin-bottom: 26px;
     }
+
     input {
       flex: 1;
-      background: #161d2b;
-      border: 1px solid #2a3547;
-      color: #e6edf3;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 1rem;
+      background: var(--board-panel);
+      border: 1px solid var(--board-line);
+      color: var(--paper);
+      padding: 12px 14px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
     }
+
+    input::placeholder {
+      color: var(--paper-dim);
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--amber-dim);
+      box-shadow: 0 0 0 1px var(--amber-dim);
+    }
+
+    input[type="date"] { flex: 0 0 148px; color-scheme: dark; }
+
     button {
-      background: #4da3ff;
-      color: #0b1220;
+      background: var(--amber);
+      color: #1a1204;
       border: none;
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-weight: 600;
+      padding: 0 22px;
+      font-family: "Big Shoulders Display", sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       cursor: pointer;
+      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+      transition: filter 0.15s ease;
     }
-    button:disabled { opacity: 0.5; cursor: default; }
-    .card {
-      background: #161d2b;
-      border: 1px solid #2a3547;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 12px;
+
+    button:hover:not(:disabled) { filter: brightness(1.12); }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    #flight-list { display: flex; flex-direction: column; gap: 0; }
+
+    .board-row {
+      background: var(--board-panel);
+      border-left: 4px solid var(--amber-dim);
+      border-bottom: 1px solid var(--board-line);
+      padding: 16px 16px 14px;
+      transform-origin: top center;
+      animation: flap-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
     }
-    .card-header {
+
+    .board-row.status-delayed,
+    .board-row.status-cancelled { border-left-color: var(--red); }
+    .board-row.status-arrived,
+    .board-row.status-landed { border-left-color: var(--cyan); }
+
+    .row-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
+      align-items: baseline;
+      margin-bottom: 10px;
+      gap: 12px;
     }
-    .flight-number { font-weight: 700; font-size: 1.1rem; }
+
+    .flight-number {
+      font-family: "Big Shoulders Display", sans-serif;
+      font-weight: 800;
+      font-size: 1.5rem;
+      letter-spacing: 0.03em;
+      color: var(--paper);
+    }
+
+    .flight-date {
+      color: var(--paper-dim);
+      font-size: 0.78rem;
+      letter-spacing: 0.05em;
+    }
+
     .status-badge {
-      font-size: 0.8rem;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: #2a3547;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--amber);
+      border: 1px solid var(--amber-dim);
+      background: rgba(255, 180, 0, 0.06);
+      white-space: nowrap;
     }
-    .leg { display: flex; justify-content: space-between; font-size: 0.9rem; margin-top: 6px; }
-    .leg-label { color: #8b98a5; }
+
+    .status-delayed .status-badge,
+    .status-cancelled .status-badge {
+      color: var(--red);
+      border-color: var(--red);
+      background: rgba(255, 91, 77, 0.08);
+    }
+
+    .status-arrived .status-badge,
+    .status-landed .status-badge {
+      color: var(--cyan);
+      border-color: var(--cyan);
+      background: rgba(95, 224, 208, 0.08);
+    }
+
+    .leg {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.86rem;
+      padding: 5px 0;
+      border-top: 1px dashed var(--board-line);
+    }
+
+    .leg-label {
+      color: var(--paper-dim);
+      letter-spacing: 0.03em;
+    }
+
+    .leg-time {
+      font-variant-numeric: tabular-nums;
+      color: var(--paper);
+      text-align: right;
+    }
+
+    .row-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
     .remove-btn {
       background: none;
       border: none;
-      color: #8b98a5;
+      color: var(--paper-dim);
       cursor: pointer;
-      font-size: 0.85rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       padding: 0;
     }
-    .empty { color: #8b98a5; text-align: center; padding: 40px 0; }
+
+    .remove-btn:hover { color: var(--red); }
+    .remove-btn::before { content: "[ "; }
+    .remove-btn::after { content: " ]"; }
+
+    .empty {
+      color: var(--paper-dim);
+      text-align: center;
+      padding: 50px 10px;
+      font-size: 0.88rem;
+      letter-spacing: 0.04em;
+      border: 1px dashed var(--board-line);
+    }
+
+    .empty .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1em;
+      background: var(--amber);
+      vertical-align: -2px;
+      margin-left: 4px;
+      animation: blink 1s steps(1) infinite;
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>FlightWatch</h1>
-    <p class="hint">Track a flight. Get notified via ntfy when its status changes.</p>
+    <header class="masthead">
+      <h1>FLIGHT<br />WATCH</h1>
+      <div class="clock-wrap">
+        <span><span class="live-dot"></span>LIVE</span>
+        <span id="clock">--:--:--</span>
+      </div>
+    </header>
+
+    <p class="hint">TRACK A FLIGHT — GET NOTIFIED VIA NTFY WHEN ITS STATUS CHANGES.</p>
 
     <form id="add-form">
-      <input id="flight-number" placeholder="Flight number (e.g. QF12)" required autocapitalize="characters" />
+      <input id="flight-number" placeholder="Flight no. e.g. QF12" required autocapitalize="characters" />
       <input id="flight-date" type="date" required />
       <button type="submit">Track</button>
     </form>
@@ -96,5 +357,13 @@
   </main>
 
   <script src="/app.js"></script>
+  <script>
+    function tickClock() {
+      const el = document.getElementById("clock");
+      if (el) el.textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+  </script>
 </body>
 </html>

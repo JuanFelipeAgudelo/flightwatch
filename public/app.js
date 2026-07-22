@@ -27,35 +27,37 @@ async function loadFlights() {
 
 function renderFlights(entries) {
   if (!entries.length) {
-    list.innerHTML = `<p class="empty">No flights tracked yet.</p>`;
+    list.innerHTML = `<p class="empty">NO FLIGHTS TRACKED — ADD ONE ABOVE<span class="cursor"></span></p>`;
     return;
   }
 
   list.innerHTML = "";
-  for (const { flight, status } of entries) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="card-header">
-        <span class="flight-number">${flight.flightNumber} · ${flight.date}</span>
+  entries.forEach(({ flight, status }, i) => {
+    const statusSlug = (status?.status ?? "unknown").toLowerCase();
+    const row = document.createElement("div");
+    row.className = `board-row status-${statusSlug}`;
+    row.style.animationDelay = `${i * 90}ms`;
+    row.innerHTML = `
+      <div class="row-top">
+        <span class="flight-number">${flight.flightNumber} <span class="flight-date">· ${flight.date}</span></span>
         <span class="status-badge">${status ? status.status : "Unknown"}</span>
       </div>
       ${status ? `
         <div class="leg">
-          <span class="leg-label">Departure — ${status.departure.airport}</span>
-          <span>${status.departure.estimatedTime ?? status.departure.scheduledTime ?? "—"} ${status.departure.gate ? `· Gate ${status.departure.gate}` : ""}</span>
+          <span class="leg-label">Dep — ${status.departure.airport}</span>
+          <span class="leg-time">${status.departure.estimatedTime ?? status.departure.scheduledTime ?? "—"}${status.departure.gate ? ` · Gate ${status.departure.gate}` : ""}</span>
         </div>
         <div class="leg">
-          <span class="leg-label">Arrival — ${status.arrival.airport}</span>
-          <span>${status.arrival.estimatedTime ?? status.arrival.scheduledTime ?? "—"} ${status.arrival.gate ? `· Gate ${status.arrival.gate}` : ""}</span>
+          <span class="leg-label">Arr — ${status.arrival.airport}</span>
+          <span class="leg-time">${status.arrival.estimatedTime ?? status.arrival.scheduledTime ?? "—"}${status.arrival.gate ? ` · Gate ${status.arrival.gate}` : ""}</span>
         </div>
-      ` : `<p class="hint">No status yet — check back in a few minutes.</p>`}
-      <div style="margin-top:10px; text-align:right;">
+      ` : `<p class="hint" style="margin:8px 0 0;">No status yet — check back in a few minutes.</p>`}
+      <div class="row-footer">
         <button class="remove-btn" data-number="${flight.flightNumber}" data-date="${flight.date}">Remove</button>
       </div>
     `;
-    list.appendChild(card);
-  }
+    list.appendChild(row);
+  });
 
   list.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
