@@ -1,0 +1,15 @@
+name = "flightwatch-worker"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Poll every 5 minutes
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "FLIGHT_DATA"
+id = "411ae9a0bf2a4ae2adcd3aea693360e6"
+
+# Secrets (set via `wrangler secret put`, not stored here):
+#   AERODATABOX_KEY  — RapidAPI key for AeroDataBox
+#   NTFY_TOPIC       — your private ntfy.sh topic name

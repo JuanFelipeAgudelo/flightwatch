@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlightWatch</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#0b1220" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #0b1220;
+      color: #e6edf3;
+      min-height: 100vh;
+    }
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 24px 16px 80px;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    p.hint { color: #8b98a5; margin-top: 0; font-size: 0.9rem; }
+    form {
+      display: flex;
+      gap: 8px;
+      margin: 20px 0;
+    }
+    input {
+      flex: 1;
+      background: #161d2b;
+      border: 1px solid #2a3547;
+      color: #e6edf3;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    button {
+      background: #4da3ff;
+      color: #0b1220;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .card {
+      background: #161d2b;
+      border: 1px solid #2a3547;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .flight-number { font-weight: 700; font-size: 1.1rem; }
+    .status-badge {
+      font-size: 0.8rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #2a3547;
+    }
+    .leg { display: flex; justify-content: space-between; font-size: 0.9rem; margin-top: 6px; }
+    .leg-label { color: #8b98a5; }
+    .remove-btn {
+      background: none;
+      border: none;
+      color: #8b98a5;
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 0;
+    }
+    .empty { color: #8b98a5; text-align: center; padding: 40px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>FlightWatch</h1>
+    <p class="hint">Track a flight. Get notified via ntfy when its status changes.</p>
+
+    <form id="add-form">
+      <input id="flight-number" placeholder="Flight number (e.g. QF12)" required autocapitalize="characters" />
+      <input id="flight-date" type="date" required />
+      <button type="submit">Track</button>
+    </form>
+
+    <div id="flight-list"></div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
