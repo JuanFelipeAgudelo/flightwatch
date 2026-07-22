@@ -1,7 +1,16 @@
 // Minimal service worker so the app is installable as a PWA.
 // No push handling here — notifications come from ntfy's own app, not this service worker.
-const CACHE_NAME = "flightwatch-v10";
-const CORE_ASSETS = ["/", "/index.html", "/app.js", "/manifest.json", "/icon.svg"];
+const CACHE_NAME = "flightwatch-v11";
+const CORE_ASSETS = [
+  "/",
+  "/index.html",
+  "/app.js",
+  "/manifest.json",
+  "/icon.svg",
+  "/apple-touch-icon.png",
+  "/icon-192.png",
+  "/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
