@@ -55,6 +55,9 @@
     html, body {
       height: 100%;
       overscroll-behavior-y: contain;
+      overflow-x: hidden;
+      touch-action: pan-y;
+      width: 100%;
     }
 
     body {
@@ -213,6 +216,7 @@
 
     input {
       flex: 1;
+      min-width: 0;
       background: var(--board-panel);
       border: 1px solid var(--board-line);
       color: var(--paper);
@@ -236,13 +240,14 @@
       box-shadow: 0 0 0 1px var(--amber-dim);
     }
 
-    input[type="date"] { flex: 0 0 148px; color-scheme: dark; }
+    input[type="date"] { flex: 1 1 120px; min-width: 0; max-width: 148px; color-scheme: dark; }
 
     button {
+      flex: 0 0 auto;
       background: var(--amber);
       color: #1a1204;
       border: none;
-      padding: 0 22px;
+      padding: 0 16px;
       font-family: "Big Shoulders Display", sans-serif;
       font-weight: 800;
       font-size: 1rem;
