@@ -2,7 +2,7 @@
 // For local dev with `wrangler dev`, this defaults to the standard local port.
 const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
   ? "http://127.0.0.1:8787"
-  : "https://flightwatch-worker.YOUR-SUBDOMAIN.workers.dev";
+  : "https://flightwatch-worker.juanfe02agu.workers.dev";
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js");
