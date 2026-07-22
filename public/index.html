@@ -287,10 +287,28 @@
       letter-spacing: 0.03em;
     }
 
-    .leg-time {
-      font-variant-numeric: tabular-nums;
-      color: var(--paper);
+    .leg-value {
+      display: inline-block;
       text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .leg-time {
+      color: var(--paper);
+    }
+
+    .leg-time.revised {
+      color: var(--amber);
+      font-weight: 600;
+    }
+
+    .leg-was {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--paper-dim);
+      text-decoration: line-through;
+      text-decoration-color: var(--red);
+      margin-top: 1px;
     }
 
     .row-footer {

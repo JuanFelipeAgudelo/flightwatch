@@ -8,6 +8,37 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js");
 }
 
+// AeroDataBox gives times like "2026-07-23 20:30-04:00" — already local to that
+// specific airport, so we only reformat for readability, never convert timezone.
+function formatFlightTime(raw) {
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if (!match) return raw;
+  const [, y, mo, d, h, mi] = match;
+  const wall = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi));
+  const weekday = wall.toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
+  const day = wall.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const time = wall.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" });
+  return `${weekday} ${day} · ${time}`;
+}
+
+function formatDateOnly(isoDate) {
+  const [y, mo, d] = isoDate.split("-").map(Number);
+  const wall = new Date(Date.UTC(y, mo - 1, d));
+  return wall.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+function renderLegTime(leg) {
+  const scheduled = formatFlightTime(leg.scheduledTime);
+  const estimated = formatFlightTime(leg.estimatedTime);
+  const changed = estimated && estimated !== scheduled;
+  const primary = estimated ?? scheduled ?? "—";
+  const gate = leg.gate ? ` · Gate ${leg.gate}` : "";
+  return changed
+    ? `<span class="leg-time revised">${primary}</span><span class="leg-was">was ${scheduled}</span>${gate}`
+    : `<span class="leg-time">${primary}</span>${gate}`;
+}
+
 const form = document.getElementById("add-form");
 const numberInput = document.getElementById("flight-number");
 const dateInput = document.getElementById("flight-date");
@@ -39,17 +70,17 @@ function renderFlights(entries) {
     row.style.animationDelay = `${i * 90}ms`;
     row.innerHTML = `
       <div class="row-top">
-        <span class="flight-number">${flight.flightNumber} <span class="flight-date">· ${flight.date}</span></span>
+        <span class="flight-number">${flight.flightNumber} <span class="flight-date">· ${formatDateOnly(flight.date)}</span></span>
         <span class="status-badge">${status ? status.status : "Unknown"}</span>
       </div>
       ${status ? `
         <div class="leg">
           <span class="leg-label">Dep — ${status.departure.airport}</span>
-          <span class="leg-time">${status.departure.estimatedTime ?? status.departure.scheduledTime ?? "—"}${status.departure.gate ? ` · Gate ${status.departure.gate}` : ""}</span>
+          <span class="leg-value">${renderLegTime(status.departure)}</span>
         </div>
         <div class="leg">
           <span class="leg-label">Arr — ${status.arrival.airport}</span>
-          <span class="leg-time">${status.arrival.estimatedTime ?? status.arrival.scheduledTime ?? "—"}${status.arrival.gate ? ` · Gate ${status.arrival.gate}` : ""}</span>
+          <span class="leg-value">${renderLegTime(status.arrival)}</span>
         </div>
       ` : `<p class="hint" style="margin:8px 0 0;">No status yet — check back in a few minutes.</p>`}
       <div class="row-footer">
