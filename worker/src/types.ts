@@ -13,8 +13,11 @@ export interface FlightStatus {
   flightNumber: string;
   date: string;
   status: string; // e.g. "Scheduled", "Delayed", "Cancelled", "Landed"
+  airline: string | null; // e.g. "JetBlue Airways"
   departure: {
     airport: string;
+    airportCode: string | null; // IATA, e.g. "HPN"
+    timeZone: string | null; // IANA, e.g. "America/New_York"
     scheduledTime: string | null;
     estimatedTime: string | null;
     terminal: string | null;
@@ -22,6 +25,8 @@ export interface FlightStatus {
   };
   arrival: {
     airport: string;
+    airportCode: string | null;
+    timeZone: string | null;
     scheduledTime: string | null;
     estimatedTime: string | null;
     terminal: string | null;

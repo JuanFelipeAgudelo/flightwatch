@@ -3,23 +3,29 @@ import type { FlightStatus, TrackedFlight } from "./types";
 const API_HOST = "aerodatabox.p.rapidapi.com";
 
 // AeroDataBox response shape is trimmed to the fields we actually use.
+interface AeroDataBoxAirport {
+  name: string;
+  iata?: string;
+  timeZone?: string;
+}
+
+interface AeroDataBoxLeg {
+  airport: AeroDataBoxAirport;
+  scheduledTime?: { local: string };
+  // AeroDataBox uses different field names depending on the airport/flight quality tier —
+  // check both rather than assuming one.
+  revisedTime?: { local: string };
+  predictedTime?: { local: string };
+  terminal?: string;
+  gate?: string;
+}
+
 interface AeroDataBoxFlight {
   number: string;
   status: string;
-  departure: {
-    airport: { name: string };
-    scheduledTime?: { local: string };
-    revisedTime?: { local: string };
-    terminal?: string;
-    gate?: string;
-  };
-  arrival: {
-    airport: { name: string };
-    scheduledTime?: { local: string };
-    revisedTime?: { local: string };
-    terminal?: string;
-    gate?: string;
-  };
+  airline?: { name: string };
+  departure: AeroDataBoxLeg;
+  arrival: AeroDataBoxLeg;
 }
 
 export async function fetchFlightStatus(
@@ -50,17 +56,22 @@ export async function fetchFlightStatus(
     flightNumber: flight.flightNumber,
     date: flight.date,
     status: f.status,
+    airline: f.airline?.name ?? null,
     departure: {
       airport: f.departure.airport.name,
+      airportCode: f.departure.airport.iata ?? null,
+      timeZone: f.departure.airport.timeZone ?? null,
       scheduledTime: f.departure.scheduledTime?.local ?? null,
-      estimatedTime: f.departure.revisedTime?.local ?? null,
+      estimatedTime: f.departure.revisedTime?.local ?? f.departure.predictedTime?.local ?? null,
       terminal: f.departure.terminal ?? null,
       gate: f.departure.gate ?? null,
     },
     arrival: {
       airport: f.arrival.airport.name,
+      airportCode: f.arrival.airport.iata ?? null,
+      timeZone: f.arrival.airport.timeZone ?? null,
       scheduledTime: f.arrival.scheduledTime?.local ?? null,
-      estimatedTime: f.arrival.revisedTime?.local ?? null,
+      estimatedTime: f.arrival.revisedTime?.local ?? f.arrival.predictedTime?.local ?? null,
       terminal: f.arrival.terminal ?? null,
       gate: f.arrival.gate ?? null,
     },

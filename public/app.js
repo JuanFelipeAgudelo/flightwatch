@@ -28,15 +28,34 @@ function formatDateOnly(isoDate) {
   return wall.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 }
 
+// Gets a short timezone abbreviation (e.g. "EDT") for an IANA zone, anchored to
+// the flight's own local wall-clock time so it reflects the right DST state.
+function tzAbbreviation(rawLocalTime, ianaZone) {
+  if (!rawLocalTime || !ianaZone) return "";
+  const match = rawLocalTime.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if (!match) return "";
+  const [, y, mo, d, h, mi] = match;
+  const wall = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi));
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: ianaZone, timeZoneName: "short", hour: "numeric" }).formatToParts(wall);
+  return parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+}
+
 function renderLegTime(leg) {
   const scheduled = formatFlightTime(leg.scheduledTime);
   const estimated = formatFlightTime(leg.estimatedTime);
   const changed = estimated && estimated !== scheduled;
   const primary = estimated ?? scheduled ?? "—";
+  const tz = tzAbbreviation(leg.estimatedTime ?? leg.scheduledTime, leg.timeZone);
+  const tzSuffix = tz ? ` ${tz}` : "";
   const gate = leg.gate ? ` · Gate ${leg.gate}` : "";
   return changed
-    ? `<span class="leg-time revised">${primary}</span><span class="leg-was">was ${scheduled}</span>${gate}`
-    : `<span class="leg-time">${primary}</span>${gate}`;
+    ? `<span class="leg-time revised">${primary}${tzSuffix}</span><span class="leg-was">was ${scheduled}</span>${gate}`
+    : `<span class="leg-time">${primary}${tzSuffix}</span>${gate}`;
+}
+
+function renderLegLabel(direction, leg) {
+  const code = leg.airportCode ? ` ${leg.airportCode}` : "";
+  return `<span class="leg-dir">${direction}${code}</span> ${leg.airport}`;
 }
 
 const form = document.getElementById("add-form");
@@ -73,13 +92,14 @@ function renderFlights(entries) {
         <span class="flight-number">${flight.flightNumber} <span class="flight-date">· ${formatDateOnly(flight.date)}</span></span>
         <span class="status-badge">${status ? status.status : "Unknown"}</span>
       </div>
+      ${status?.airline ? `<div class="airline-line">${status.airline}</div>` : ""}
       ${status ? `
         <div class="leg">
-          <span class="leg-label">Dep — ${status.departure.airport}</span>
+          <span class="leg-label">${renderLegLabel("DEP", status.departure)}</span>
           <span class="leg-value">${renderLegTime(status.departure)}</span>
         </div>
         <div class="leg">
-          <span class="leg-label">Arr — ${status.arrival.airport}</span>
+          <span class="leg-label">${renderLegLabel("ARR", status.arrival)}</span>
           <span class="leg-value">${renderLegTime(status.arrival)}</span>
         </div>
       ` : `<p class="hint" style="margin:8px 0 0;">No status yet — check back in a few minutes.</p>`}
