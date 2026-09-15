@@ -9,9 +9,8 @@ export interface TrackedFlight {
 }
 
 // One private per-person list, keyed by an opaque list code the client holds
-// in localStorage. Each list has its own ntfy topic so notifications stay private.
+// in localStorage.
 export interface ListData {
-  ntfyTopic: string;
   flights: TrackedFlight[];
 }
 
@@ -57,6 +56,12 @@ export function trackersKey(flight: TrackedFlight): string {
 
 export function listKey(code: string): string {
   return `list:${code}`;
+}
+
+// The list code is already an unguessable secret, so the ntfy topic is derived
+// from it directly instead of being a second independently-generated secret.
+export function ntfyTopicFor(listCode: string): string {
+  return `flightwatch-${listCode}`;
 }
 
 // Deduped union of every flight anyone is tracking — the set cron actually polls.

@@ -8,6 +8,7 @@ import {
   TrackedFlight,
   flightKey,
   listKey,
+  ntfyTopicFor,
   trackersKey,
 } from "./types";
 
@@ -21,27 +22,33 @@ function randomHex(bytes: number): string {
   return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function getJSON<T>(env: Env, key: string, fallback: T): Promise<T> {
+  const raw = await env.FLIGHT_DATA.get(key);
+  return raw ? (JSON.parse(raw) as T) : fallback;
+}
+
+async function putJSON(env: Env, key: string, value: unknown): Promise<void> {
+  await env.FLIGHT_DATA.put(key, JSON.stringify(value));
+}
+
 async function getList(env: Env, code: string): Promise<ListData | null> {
-  const raw = await env.FLIGHT_DATA.get(listKey(code));
-  return raw ? (JSON.parse(raw) as ListData) : null;
+  return getJSON<ListData | null>(env, listKey(code), null);
 }
 
 async function saveList(env: Env, code: string, data: ListData): Promise<void> {
-  await env.FLIGHT_DATA.put(listKey(code), JSON.stringify(data));
+  return putJSON(env, listKey(code), data);
 }
 
 async function getAllTracked(env: Env): Promise<TrackedFlight[]> {
-  const raw = await env.FLIGHT_DATA.get(ALL_TRACKED_KEY);
-  return raw ? JSON.parse(raw) : [];
+  return getJSON<TrackedFlight[]>(env, ALL_TRACKED_KEY, []);
 }
 
 async function saveAllTracked(env: Env, flights: TrackedFlight[]): Promise<void> {
-  await env.FLIGHT_DATA.put(ALL_TRACKED_KEY, JSON.stringify(flights));
+  return putJSON(env, ALL_TRACKED_KEY, flights);
 }
 
 async function getTrackers(env: Env, flight: TrackedFlight): Promise<string[]> {
-  const raw = await env.FLIGHT_DATA.get(trackersKey(flight));
-  return raw ? JSON.parse(raw) : [];
+  return getJSON<string[]>(env, trackersKey(flight), []);
 }
 
 async function saveTrackers(env: Env, flight: TrackedFlight, codes: string[]): Promise<void> {
@@ -49,7 +56,7 @@ async function saveTrackers(env: Env, flight: TrackedFlight, codes: string[]): P
   if (codes.length === 0) {
     await env.FLIGHT_DATA.delete(key);
   } else {
-    await env.FLIGHT_DATA.put(key, JSON.stringify(codes));
+    await putJSON(env, key, codes);
   }
 }
 
@@ -103,10 +110,12 @@ export default {
 
     // POST /api/register — first-visit call: creates a private list + its own ntfy topic
     if (request.method === "POST" && url.pathname === "/api/register") {
-      const listCode = randomHex(4);
-      const ntfyTopic = `flightwatch-${randomHex(5)}`;
-      await saveList(env, listCode, { ntfyTopic, flights: [] });
-      return json({ listCode, ntfyTopic });
+      let listCode = randomHex(4);
+      while (await getList(env, listCode)) {
+        listCode = randomHex(4); // extremely unlikely, but don't silently clobber an existing list
+      }
+      await saveList(env, listCode, { flights: [] });
+      return json({ listCode, ntfyTopic: ntfyTopicFor(listCode) });
     }
 
     // GET /api/flights?listCode=xxx — this list's tracked flights + last known status
@@ -123,7 +132,7 @@ export default {
           return { flight: f, status: raw ? (JSON.parse(raw) as FlightStatus) : null };
         })
       );
-      return json({ ntfyTopic: list.ntfyTopic, entries });
+      return json({ ntfyTopic: ntfyTopicFor(listCode), entries });
     }
 
     // POST /api/flights — add a flight to a list: { listCode, flightNumber, date }
@@ -185,37 +194,37 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
     const tracked = await getAllTracked(env);
 
-    for (const flight of tracked) {
-      try {
-        const key = flightKey(flight);
-        const prevRaw = await env.FLIGHT_DATA.get(key);
-        const prev: FlightStatus | null = prevRaw ? JSON.parse(prevRaw) : null;
+    // Independent per-flight, so poll and notify for all of them concurrently
+    // instead of paying each flight's KV + AeroDataBox round-trip in sequence.
+    await Promise.all(
+      tracked.map(async (flight) => {
+        try {
+          const key = flightKey(flight);
+          const prevRaw = await env.FLIGHT_DATA.get(key);
+          const prev: FlightStatus | null = prevRaw ? JSON.parse(prevRaw) : null;
 
-        const next = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
-        if (!next) continue;
+          const next = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
+          if (!next) return;
 
-        const changes = diffFlightStatus(prev, next);
-        await env.FLIGHT_DATA.put(key, JSON.stringify(next));
+          const changes = diffFlightStatus(prev, next);
+          await env.FLIGHT_DATA.put(key, JSON.stringify(next));
 
-        if (changes.length > 0) {
-          const trackerCodes = await getTrackers(env, flight);
-          // Multiple list codes can share (or independently land on) the same topic —
-          // dedupe so people don't get the same push twice.
-          const topics = new Set<string>();
-          for (const code of trackerCodes) {
-            const list = await getList(env, code);
-            if (list?.ntfyTopic) topics.add(list.ntfyTopic);
+          if (changes.length > 0) {
+            const trackerCodes = await getTrackers(env, flight);
+            // Topics are derived from the list code directly, so no extra KV
+            // lookups are needed to resolve where to send this.
+            const topics = new Set(trackerCodes.map(ntfyTopicFor));
+
+            await Promise.all(
+              Array.from(topics).map((topic) =>
+                sendNtfyNotification(topic, `${flight.flightNumber} — ${next.status}`, changes.join("\n"))
+              )
+            );
           }
-
-          await Promise.all(
-            Array.from(topics).map((topic) =>
-              sendNtfyNotification(topic, `${flight.flightNumber} — ${next.status}`, changes.join("\n"))
-            )
-          );
+        } catch (err) {
+          console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
         }
-      } catch (err) {
-        console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
-      }
-    }
+      })
+    );
   },
 };
