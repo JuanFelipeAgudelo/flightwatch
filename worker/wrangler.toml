@@ -12,4 +12,6 @@ id = "411ae9a0bf2a4ae2adcd3aea693360e6"
 
 # Secrets (set via `wrangler secret put`, not stored here):
 #   AERODATABOX_KEY  — RapidAPI key for AeroDataBox
-#   NTFY_TOPIC       — your private ntfy.sh topic name
+#
+# ntfy topics are no longer a secret: each private list gets its own auto-generated
+# topic at registration time (see /api/register), stored in KV alongside the list.

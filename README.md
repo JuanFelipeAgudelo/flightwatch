@@ -7,6 +7,10 @@ Track a flight number and get pushed a notification when its status changes (dep
 - **Backend:** Cloudflare Worker — cron polls AeroDataBox every 5 min, diffs status, stores state in Workers KV
 - **Notifications:** [ntfy.sh](https://ntfy.sh) — Worker POSTs a plain message when status changes, ntfy's app pushes it to your phone
 - **Flight data:** [AeroDataBox](https://aerodatabox.com/) via RapidAPI (free tier)
+- **Multi-tenancy:** private per-person lists — first visit generates a random list
+  code + ntfy topic, stored in the browser's `localStorage`. No accounts, but also
+  no recovery if you clear storage or switch devices without copying your code
+  (see `docs/spec-per-user-lists.md`).
 
 No Web Push/VAPID, no webhooks, no credit-based alerts — just a cheap poll and a plain HTTP POST.
 
@@ -16,7 +20,8 @@ No Web Push/VAPID, no webhooks, no credit-based alerts — just a cheap poll and
    - GitHub account
    - Cloudflare account
    - RapidAPI account → subscribe to AeroDataBox (free tier), grab API key
-   - Install the [ntfy app](https://ntfy.sh) on your phone, pick a random unguessable topic name (e.g. `flightwatch-ag-x7k2p`)
+   - Install the [ntfy app](https://ntfy.sh) on your phone — each visitor gets their
+     own auto-generated topic shown in the app's settings strip, to subscribe to
 
 2. **Local tools**
    ```
@@ -39,7 +44,6 @@ No Web Push/VAPID, no webhooks, no credit-based alerts — just a cheap poll and
 5. **Set secrets**
    ```
    wrangler secret put AERODATABOX_KEY
-   wrangler secret put NTFY_TOPIC
    ```
 
 6. **Run locally**

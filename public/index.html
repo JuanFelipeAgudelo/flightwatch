@@ -210,6 +210,72 @@
       letter-spacing: 0.02em;
     }
 
+    p.hint-warning {
+      margin-top: -14px;
+      color: var(--amber-dim);
+    }
+
+    .list-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 18px;
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border: 1px dashed var(--board-line);
+      font-size: 0.78rem;
+    }
+
+    .list-item {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .list-label {
+      color: var(--paper-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.68rem;
+    }
+
+    .list-value {
+      color: var(--amber);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .mini-btn {
+      background: none;
+      border: 1px solid var(--board-line);
+      color: var(--paper-dim);
+      cursor: pointer;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+    }
+
+    .mini-btn:hover { color: var(--amber); border-color: var(--amber-dim); }
+
+    .mini-btn-standalone { margin-left: auto; }
+
+    #switch-code-form[hidden] { display: none; }
+
+    #switch-code-form {
+      display: flex;
+      flex-basis: 100%;
+      gap: 8px;
+      margin: 0;
+    }
+
+    #switch-code-form input {
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      text-transform: none;
+    }
+
     form {
       display: flex;
       gap: 10px;
@@ -462,6 +528,27 @@
         <span id="clock">--:--:--</span>
       </div>
     </header>
+
+    <section class="list-bar">
+      <div class="list-item">
+        <span class="list-label">Your code</span>
+        <span class="list-value" id="list-code-display">····</span>
+        <button type="button" class="mini-btn" id="copy-code-btn">Copy</button>
+      </div>
+      <div class="list-item">
+        <span class="list-label">Notify topic</span>
+        <span class="list-value" id="ntfy-topic-display">····</span>
+        <button type="button" class="mini-btn" id="copy-topic-btn">Copy</button>
+      </div>
+      <button type="button" class="mini-btn mini-btn-standalone" id="switch-code-btn">Use a different code</button>
+      <form id="switch-code-form" hidden>
+        <input id="switch-code-input" placeholder="Paste a list code" autocapitalize="off" autocorrect="off" />
+        <button type="submit" class="mini-btn mini-btn-standalone">Switch</button>
+      </form>
+    </section>
+    <p class="hint hint-warning">
+      This code is the only way back to your list — clearing browser data or losing it means starting over, with no recovery.
+    </p>
 
     <form id="add-form">
       <input id="flight-number" placeholder="Flight no. e.g. QF12" required autocapitalize="characters" />
