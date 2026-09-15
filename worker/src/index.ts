@@ -68,6 +68,14 @@ async function addToAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
   }
 }
 
+async function removeFromAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
+  const all = await getAllTracked(env);
+  const remaining = all.filter((f) => !sameFlight(f, flight));
+  if (remaining.length !== all.length) {
+    await saveAllTracked(env, remaining);
+  }
+}
+
 // Drops a flight from the global poll set once nobody's list references it anymore,
 // so cron stops burning AeroDataBox quota on abandoned flights. Takes the caller's
 // already-fetched remaining trackers list rather than re-reading the same KV key.
@@ -77,12 +85,27 @@ async function removeFromAllTrackedIfOrphaned(
   remainingTrackers: string[]
 ): Promise<void> {
   if (remainingTrackers.length > 0) return;
-  const all = await getAllTracked(env);
-  const remaining = all.filter((f) => !sameFlight(f, flight));
-  if (remaining.length !== all.length) {
-    await saveAllTracked(env, remaining);
-  }
+  await removeFromAllTracked(env, flight);
   await env.FLIGHT_DATA.delete(flightKey(flight));
+}
+
+// A landed/arrived flight's status won't change again, so keep polling for a
+// grace window (in case of a late correction) and then stop for good — this is
+// the single biggest lever on AeroDataBox quota, since nothing previously ever
+// stopped cron from polling a flight that landed weeks ago.
+const LANDED_POLL_GRACE_MS = 2 * 60 * 60 * 1000; // 2 hours past arrival
+
+function isLanded(status: FlightStatus): boolean {
+  return /landed|arrived/i.test(status.status);
+}
+
+async function stopPollingIfLongLanded(env: Env, flight: TrackedFlight, status: FlightStatus): Promise<void> {
+  if (!isLanded(status)) return;
+  const arrivalUtc = status.arrival.estimatedTimeUtc ?? status.arrival.scheduledTimeUtc;
+  if (!arrivalUtc) return;
+  if (Date.now() - new Date(arrivalUtc).getTime() > LANDED_POLL_GRACE_MS) {
+    await removeFromAllTracked(env, flight);
+  }
 }
 
 function corsHeaders(): HeadersInit {
@@ -229,6 +252,8 @@ export default {
               )
             );
           }
+
+          await stopPollingIfLongLanded(env, flight, next);
         } catch (err) {
           console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
         }

@@ -2,9 +2,11 @@ name = "flightwatch-worker"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
-# Poll every 5 minutes
+# Poll every 20 minutes — plenty responsive for a delay/gate-change alert, and a
+# ~4x cut in AeroDataBox quota usage versus every 5 minutes (see also: scheduled()
+# stops polling a flight once it's landed, which matters far more at real scale).
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/20 * * * *"]
 
 [[kv_namespaces]]
 binding = "FLIGHT_DATA"
