@@ -16,14 +16,24 @@ const LS_NTFY_TOPIC = "fw_ntfy_topic";
 let listCode = localStorage.getItem(LS_LIST_CODE);
 let ntfyTopic = localStorage.getItem(LS_NTFY_TOPIC);
 
+// Returns true once `listCode` holds a working code, false if registration failed
+// (nothing is persisted in that case, so a reload safely retries from scratch).
 async function ensureList() {
-  if (listCode) return;
-  const res = await fetch(`${API_BASE}/api/register`, { method: "POST" });
-  const data = await res.json();
-  listCode = data.listCode;
-  ntfyTopic = data.ntfyTopic;
-  localStorage.setItem(LS_LIST_CODE, listCode);
-  localStorage.setItem(LS_NTFY_TOPIC, ntfyTopic);
+  if (listCode) return true;
+  try {
+    const res = await fetch(`${API_BASE}/api/register`, { method: "POST" });
+    if (!res.ok) throw new Error(`register failed: ${res.status}`);
+    const data = await res.json();
+    if (!data.listCode) throw new Error("register response missing listCode");
+    listCode = data.listCode;
+    ntfyTopic = data.ntfyTopic;
+    localStorage.setItem(LS_LIST_CODE, listCode);
+    localStorage.setItem(LS_NTFY_TOPIC, ntfyTopic);
+    return true;
+  } catch (err) {
+    console.error("Failed to register a list:", err);
+    return false;
+  }
 }
 
 function renderListInfo() {
@@ -31,13 +41,27 @@ function renderListInfo() {
   document.getElementById("ntfy-topic-display").textContent = ntfyTopic ?? "—";
 }
 
-function switchToCode(code) {
-  listCode = code.trim();
-  ntfyTopic = null; // unknown until the next successful /api/flights response fills it in
-  localStorage.setItem(LS_LIST_CODE, listCode);
-  localStorage.removeItem(LS_NTFY_TOPIC);
-  renderListInfo();
-  loadFlights();
+// Verifies a code with the server before switching to it, so a typo can never
+// overwrite the working code that's still the only way back to that list.
+async function switchToCode(code) {
+  code = code.trim();
+  try {
+    const res = await fetch(`${API_BASE}/api/flights?listCode=${encodeURIComponent(code)}`);
+    if (!res.ok) {
+      alert("That code isn't recognized — check it and try again.");
+      return;
+    }
+    const data = await res.json();
+    listCode = code;
+    ntfyTopic = data.ntfyTopic;
+    localStorage.setItem(LS_LIST_CODE, listCode);
+    localStorage.setItem(LS_NTFY_TOPIC, ntfyTopic);
+    renderListInfo();
+    renderFlights(data.entries);
+  } catch (err) {
+    console.error(err);
+    alert("Couldn't reach the server. Try again.");
+  }
 }
 
 async function copyToClipboard(text, btn) {
@@ -223,11 +247,15 @@ function renderFlights(entries) {
 
   list.querySelectorAll(".remove-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      await fetch(`${API_BASE}/api/flights`, {
+      const res = await fetch(`${API_BASE}/api/flights`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listCode, flightNumber: btn.dataset.number, date: btn.dataset.date }),
       });
+      if (!res.ok) {
+        alert("Couldn't remove that flight. Try again.");
+        return;
+      }
       loadFlights();
     });
   });
@@ -242,11 +270,16 @@ form.addEventListener("submit", async (e) => {
   const submitBtn = form.querySelector("button");
   submitBtn.disabled = true;
   try {
-    await fetch(`${API_BASE}/api/flights`, {
+    const res = await fetch(`${API_BASE}/api/flights`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ listCode, flightNumber, date }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error ?? "Couldn't add that flight.");
+      return;
+    }
     numberInput.value = "";
     await loadFlights();
   } finally {
@@ -278,7 +311,11 @@ form.addEventListener("submit", async (e) => {
 })();
 
 (async function init() {
-  await ensureList();
+  const ok = await ensureList();
+  if (!ok) {
+    list.innerHTML = `<p class="empty">Couldn't set up your list. Check your connection and reload.</p>`;
+    return;
+  }
   renderListInfo();
   loadFlights();
 })();

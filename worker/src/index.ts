@@ -62,10 +62,14 @@ async function addToAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
 }
 
 // Drops a flight from the global poll set once nobody's list references it anymore,
-// so cron stops burning AeroDataBox quota on abandoned flights.
-async function removeFromAllTrackedIfOrphaned(env: Env, flight: TrackedFlight): Promise<void> {
-  const trackers = await getTrackers(env, flight);
-  if (trackers.length > 0) return;
+// so cron stops burning AeroDataBox quota on abandoned flights. Takes the caller's
+// already-fetched remaining trackers list rather than re-reading the same KV key.
+async function removeFromAllTrackedIfOrphaned(
+  env: Env,
+  flight: TrackedFlight,
+  remainingTrackers: string[]
+): Promise<void> {
+  if (remainingTrackers.length > 0) return;
   const all = await getAllTracked(env);
   const remaining = all.filter((f) => !sameFlight(f, flight));
   if (remaining.length !== all.length) {
@@ -157,7 +161,9 @@ export default {
     // DELETE /api/flights — stop tracking: { listCode, flightNumber, date }
     if (request.method === "DELETE" && url.pathname === "/api/flights") {
       const body = (await request.json()) as TrackedFlight & { listCode?: string };
-      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+      if (!body.listCode || !body.flightNumber || !body.date) {
+        return json({ error: "listCode, flightNumber and date are required" }, 400);
+      }
 
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
@@ -168,7 +174,7 @@ export default {
 
       const trackers = (await getTrackers(env, flight)).filter((c) => c !== body.listCode);
       await saveTrackers(env, flight, trackers);
-      await removeFromAllTrackedIfOrphaned(env, flight);
+      await removeFromAllTrackedIfOrphaned(env, flight, trackers);
 
       return json({ ok: true });
     }
