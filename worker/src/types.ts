@@ -6,12 +6,34 @@ export interface Env {
 export interface TrackedFlight {
   flightNumber: string; // e.g. "QF12"
   date: string; // YYYY-MM-DD, local departure date
+  // Pickup metadata. Lives on the list record, never on the shared flight record,
+  // so passenger details can't leak between list codes tracking the same flight.
+  passenger?: string | null;
+  pax?: number | null;
+  dropOff?: string | null;
+  note?: string | null;
 }
+
+// Feeds the "leave by" computation and the list-wide display choices. Density and
+// theme are deliberately NOT here — those are per-device (a dispatcher's tablet and
+// a driver's phone can share a list code and want different views).
+export interface ListSettings {
+  driveMinutes: Record<string, number>; // arrival IATA -> minutes, e.g. { MCO: 25 }
+  bufferMinutes: number;
+  showPassengerNames: boolean;
+}
+
+export const DEFAULT_SETTINGS: ListSettings = {
+  driveMinutes: {},
+  bufferMinutes: 10,
+  showPassengerNames: true,
+};
 
 // One private per-person list, keyed by an opaque list code the client holds
 // in localStorage.
 export interface ListData {
   flights: TrackedFlight[];
+  settings?: ListSettings;
 }
 
 export interface FlightStatus {

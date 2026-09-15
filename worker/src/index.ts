@@ -2,9 +2,11 @@ import { diffFlightStatus, fetchFlightStatus } from "./aerodatabox";
 import { sendNtfyNotification } from "./ntfy";
 import {
   ALL_TRACKED_KEY,
+  DEFAULT_SETTINGS,
   Env,
   FlightStatus,
   ListData,
+  ListSettings,
   TrackedFlight,
   flightKey,
   listKey,
@@ -14,6 +16,19 @@ import {
 
 function sameFlight(a: TrackedFlight, b: TrackedFlight): boolean {
   return a.flightNumber === b.flightNumber && a.date === b.date;
+}
+
+type PickupFields = Pick<TrackedFlight, "passenger" | "pax" | "dropOff" | "note">;
+
+// Only copies keys the caller actually sent, so a PATCH that omits `note` leaves
+// the stored note alone instead of blanking it.
+function pickupFieldsFrom(body: Partial<TrackedFlight>): Partial<PickupFields> {
+  const out: Partial<PickupFields> = {};
+  if ("passenger" in body) out.passenger = body.passenger ?? null;
+  if ("pax" in body) out.pax = body.pax ?? null;
+  if ("dropOff" in body) out.dropOff = body.dropOff ?? null;
+  if ("note" in body) out.note = body.note ?? null;
+  return out;
 }
 
 function randomHex(bytes: number): string {
@@ -111,7 +126,7 @@ async function stopPollingIfLongLanded(env: Env, flight: TrackedFlight, status: 
 function corsHeaders(): HeadersInit {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };
 }
@@ -155,7 +170,11 @@ export default {
           return { flight: f, status: raw ? (JSON.parse(raw) as FlightStatus) : null };
         })
       );
-      return json({ ntfyTopic: ntfyTopicFor(listCode), entries });
+      return json({
+        ntfyTopic: ntfyTopicFor(listCode),
+        settings: { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) },
+        entries,
+      });
     }
 
     // POST /api/flights — add a flight to a list: { listCode, flightNumber, date }
@@ -168,11 +187,19 @@ export default {
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const flight: TrackedFlight = { flightNumber: body.flightNumber, date: body.date };
-      if (!list.flights.some((f) => sameFlight(f, flight))) {
+      const flight: TrackedFlight = {
+        flightNumber: body.flightNumber,
+        date: body.date,
+        ...pickupFieldsFrom(body),
+      };
+      const existing = list.flights.find((f) => sameFlight(f, flight));
+      if (existing) {
+        // Re-adding a flight with pickup details fills them in rather than duplicating.
+        Object.assign(existing, pickupFieldsFrom(body));
+      } else {
         list.flights.push(flight);
-        await saveList(env, body.listCode, list);
       }
+      await saveList(env, body.listCode, list);
 
       await addToAllTracked(env, flight);
       const trackers = await getTrackers(env, flight);
@@ -196,6 +223,46 @@ export default {
       }
 
       return json({ flight, status });
+    }
+
+    // PATCH /api/flights — edit pickup details without re-adding the flight
+    if (request.method === "PATCH" && url.pathname === "/api/flights") {
+      const body = (await request.json()) as TrackedFlight & { listCode?: string };
+      if (!body.listCode || !body.flightNumber || !body.date) {
+        return json({ error: "listCode, flightNumber and date are required" }, 400);
+      }
+
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const entry = list.flights.find((f) =>
+        sameFlight(f, { flightNumber: body.flightNumber, date: body.date })
+      );
+      if (!entry) return json({ error: "Flight is not on this list" }, 404);
+
+      Object.assign(entry, pickupFieldsFrom(body));
+      await saveList(env, body.listCode, list);
+      return json({ flight: entry });
+    }
+
+    // PUT /api/settings — write this list's drive times, buffer and display prefs
+    if (request.method === "PUT" && url.pathname === "/api/settings") {
+      const body = (await request.json()) as Partial<ListSettings> & { listCode?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const current = { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) };
+      const settings: ListSettings = {
+        driveMinutes: body.driveMinutes ?? current.driveMinutes,
+        bufferMinutes: body.bufferMinutes ?? current.bufferMinutes,
+        showPassengerNames: body.showPassengerNames ?? current.showPassengerNames,
+      };
+
+      list.settings = settings;
+      await saveList(env, body.listCode, list);
+      return json({ settings });
     }
 
     // DELETE /api/flights — stop tracking: { listCode, flightNumber, date }

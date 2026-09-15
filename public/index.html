@@ -2,57 +2,86 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>FlightWatch</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <meta name="theme-color" content="#0a0906" />
+  <meta name="theme-color" content="#0E1B30" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
+    /* ============ TOKENS — night (default) ============ */
     :root {
       color-scheme: dark;
-      --board-bg: #0a0906;
-      --board-panel: #14110b;
-      --board-line: #2b2418;
-      --amber: #ffb400;
-      --amber-dim: #8a6a1f;
-      --amber-glow: rgba(255, 180, 0, 0.35);
-      --cyan: #5fe0d0;
-      --red: #ff5b4d;
-      --paper: #e9dfc8;
-      --paper-dim: #9c9280;
+      --page:            #0E1B30;
+      --panel:           #16294A;
+      --panel-raised:    #1C3459;
+      --card:            #142545;
+      --leaveby-bg:      #1A3055;
+      --hero-alert-bg:   #1A2138;
+      --cell-alert-bg:   #33202A;
+      --warn-strip:      #251E14;
+      --hairline:        #1E3252;
+      --hairline-strong: #2E4571;
+      --border-dashed:   #3B517A;
+
+      --ink:             #F4F1EA;
+      --ink-2:           #8FA1C0;
+      --ink-warn:        #D8C9A8;
+      --ink-struck:      #C0A08E;
+
+      --brass:           #E8A33D;
+      --brass-fill:      #E8A33D;
+      --brass-ink:       #1A1206;
+      --brass-ink-soft:  #4A3206;
+
+      --ok:              #4FC38A;
+      --ok-border:       #2C6B52;
+      --ok-bg:           #12312A;
+      --alert-text:      #FF7A62;
+      --alert-fill:      #B4321C;
+      --alert-accent:    #E2543C;
+
+      --mono-weight:     600;  /* steps to 700 in daylight */
+      /* Default so sheets (rendered outside .app) still get a side gutter. */
+      --gutter:          16px;
+    }
+
+    /* ============ TOKENS — daylight ============ */
+    [data-theme="day"] {
+      color-scheme: light;
+      --page:            #EFECE4;
+      --panel:           #FFFFFF;
+      --panel-raised:    #F6F3EB;
+      --card:            #FFFFFF;
+      --leaveby-bg:      #FBF3E3;
+      --hero-alert-bg:   #FDF1EC;
+      --cell-alert-bg:   #FBE4DD;
+      --warn-strip:      #FBF3E3;
+      --hairline:        #DBD6C9;
+      --hairline-strong: #C3BCAA;
+      --border-dashed:   #B9B2A2;
+
+      --ink:             #101E36;
+      --ink-2:           #5A6880;
+      --ink-warn:        #6B4E17;
+      --ink-struck:      #8A7358;
+
+      --brass:           #8A5A06;   /* text — #E8A33D is only ~2.2:1 on light */
+      --brass-fill:      #E8A33D;   /* fills keep the brand brass with ink labels */
+
+      --ok:              #1E7A4F;
+      --ok-border:       #1E7A4F;
+      --ok-bg:           #E4F2EA;
+      --alert-text:      #B4321C;
+
+      --mono-weight:     700;
     }
 
     * { box-sizing: border-box; }
-
-    @keyframes flap-in {
-      0%   { opacity: 0; transform: scaleY(0.1) translateY(-6px); filter: blur(2px); }
-      55%  { opacity: 1; transform: scaleY(1.08) translateY(1px); filter: blur(0); }
-      100% { opacity: 1; transform: scaleY(1) translateY(0); }
-    }
-
-    @keyframes flicker {
-      0%, 100% { opacity: 1; }
-      92% { opacity: 1; }
-      93% { opacity: 0.6; }
-      94% { opacity: 1; }
-      96% { opacity: 0.75; }
-      97% { opacity: 1; }
-    }
-
-    @keyframes blink {
-      0%, 49% { opacity: 1; }
-      50%, 100% { opacity: 0.15; }
-    }
-
-    @keyframes scan {
-      0% { background-position: 0 0; }
-      100% { background-position: 0 40px; }
-    }
 
     html, body {
       height: 100%;
@@ -64,509 +93,621 @@
 
     body {
       margin: 0;
-      min-height: 100vh;
-      font-family: "IBM Plex Mono", ui-monospace, monospace;
-      background:
-        radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255,180,0,0.10), transparent 60%),
-        var(--board-bg);
-      color: var(--paper);
-      position: relative;
-      animation: flicker 7s infinite;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "Instrument Sans", system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 5;
-      background-image: repeating-linear-gradient(
-        to bottom,
-        rgba(0,0,0,0.18) 0px,
-        rgba(0,0,0,0.18) 1px,
-        transparent 2px,
-        transparent 4px
-      );
-      mix-blend-mode: multiply;
-      opacity: 0.5;
-    }
-
-    body::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 4;
-      box-shadow: inset 0 0 160px 40px rgba(0,0,0,0.7);
-    }
-
-    main {
-      position: relative;
-      z-index: 1;
-      max-width: 560px;
+    .app {
+      max-width: 520px;
       margin: 0 auto;
-      padding: 32px 18px 90px;
-    }
-
-    #pull-refresh {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 20;
+      min-height: 100vh;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      height: 56px;
-      transform: translateY(-56px);
-      font-size: 0.72rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--amber);
-      background: linear-gradient(to bottom, var(--board-bg) 60%, transparent);
-      pointer-events: none;
+      flex-direction: column;
     }
 
-    #pull-refresh.dragging { transition: none; }
-    #pull-refresh.settling { transition: transform 0.25s ease; }
+    /* Inline page padding: 16px board / 20px card */
+    .app[data-density="board"] { --gutter: 16px; }
+    .app[data-density="card"]  { --gutter: 20px; }
 
-    #pull-refresh .pull-icon {
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-      border: 2px solid var(--amber-dim);
-      border-top-color: var(--amber);
-      border-radius: 50%;
-      transition: transform 0.15s ease;
-    }
-
-    #pull-refresh.ready .pull-icon {
-      transform: rotate(180deg);
-      border-top-color: var(--amber);
-    }
-
-    #pull-refresh.refreshing .pull-icon {
-      animation: spin 0.7s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    header.masthead {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      border-bottom: 3px solid var(--amber-dim);
-      padding-bottom: 14px;
-      margin-bottom: 22px;
-    }
-
-    h1 {
-      font-family: "Big Shoulders Display", sans-serif;
-      font-weight: 900;
-      font-size: clamp(2.4rem, 9vw, 3.4rem);
-      letter-spacing: 0.02em;
-      line-height: 0.85;
-      margin: 0;
-      color: var(--amber);
-      text-shadow: 0 0 18px var(--amber-glow), 0 0 2px var(--amber-glow);
-    }
-
-    .clock-wrap {
-      text-align: right;
-      font-size: 0.72rem;
-      color: var(--paper-dim);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding-bottom: 6px;
-    }
-
-    #clock {
-      display: block;
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 1.1rem;
-      color: var(--cyan);
-      letter-spacing: 0.08em;
-      margin-top: 2px;
-    }
-
-    .live-dot {
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--red);
-      margin-right: 6px;
-      animation: blink 1.6s steps(1) infinite;
-      box-shadow: 0 0 6px var(--red);
-    }
-
-    p.hint {
-      color: var(--paper-dim);
-      margin: 0 0 22px;
-      font-size: 0.82rem;
-      letter-spacing: 0.02em;
-    }
-
-    p.hint-warning {
-      margin-top: -14px;
-      color: var(--amber-dim);
-    }
-
-    .list-bar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px 18px;
-      margin-bottom: 10px;
-      padding: 10px 12px;
-      border: 1px dashed var(--board-line);
-      font-size: 0.78rem;
-    }
-
-    .list-item {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-
-    .list-label {
-      color: var(--paper-dim);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-size: 0.68rem;
-    }
-
-    .list-value {
-      color: var(--amber);
-      font-weight: 600;
-      letter-spacing: 0.04em;
-    }
-
-    .mini-btn {
-      background: none;
-      border: 1px solid var(--board-line);
-      color: var(--paper-dim);
-      cursor: pointer;
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 0.68rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 3px 8px;
-    }
-
-    .mini-btn:hover { color: var(--amber); border-color: var(--amber-dim); }
-
-    .mini-btn-standalone { margin-left: auto; }
-
-    #switch-code-form[hidden] { display: none; }
-
-    #switch-code-form {
-      display: flex;
-      flex-basis: 100%;
-      gap: 8px;
-      margin: 0;
-    }
-
-    #switch-code-form input {
-      padding: 8px 10px;
-      font-size: 0.82rem;
-      text-transform: none;
-    }
-
-    form {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 26px;
-    }
-
-    input {
-      flex: 1;
-      min-width: 0;
-      background: var(--board-panel);
-      border: 1px solid var(--board-line);
-      color: var(--paper);
-      padding: 12px 14px;
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 0.95rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-    }
-
-    input::placeholder {
-      color: var(--paper-dim);
-      text-transform: none;
-      letter-spacing: normal;
-    }
-
-    input:focus {
-      outline: none;
-      border-color: var(--amber-dim);
-      box-shadow: 0 0 0 1px var(--amber-dim);
-    }
-
-    input[type="date"] { flex: 1 1 120px; min-width: 0; max-width: 148px; color-scheme: dark; }
-
-    button {
-      flex: 0 0 auto;
-      background: var(--amber);
-      color: #1a1204;
-      border: none;
-      padding: 0 16px;
-      font-family: "Big Shoulders Display", sans-serif;
-      font-weight: 800;
-      font-size: 1rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      cursor: pointer;
-      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-      transition: filter 0.15s ease;
-    }
-
-    button:hover:not(:disabled) { filter: brightness(1.12); }
-    button:disabled { opacity: 0.4; cursor: default; }
-
-    #flight-list { display: flex; flex-direction: column; gap: 0; }
-
-    .board-row {
-      background: var(--board-panel);
-      border-left: 4px solid var(--amber-dim);
-      border-bottom: 1px solid var(--board-line);
-      padding: 16px 16px 14px;
-      transform-origin: top center;
-      animation: flap-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both;
-    }
-
-    .board-row.status-delayed,
-    .board-row.status-cancelled { border-left-color: var(--red); }
-    .board-row.status-arrived,
-    .board-row.status-landed { border-left-color: var(--cyan); }
-
-    .row-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 10px;
-      gap: 12px;
-    }
-
-    .flight-number {
-      font-family: "Big Shoulders Display", sans-serif;
-      font-weight: 800;
-      font-size: 1.5rem;
-      letter-spacing: 0.03em;
-      color: var(--paper);
-    }
-
-    .flight-date {
-      color: var(--paper-dim);
-      font-size: 0.78rem;
-      letter-spacing: 0.05em;
-    }
-
-    .status-badge {
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 4px 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--amber);
-      border: 1px solid var(--amber-dim);
-      background: rgba(255, 180, 0, 0.06);
-      white-space: nowrap;
-    }
-
-    .status-delayed .status-badge,
-    .status-cancelled .status-badge {
-      color: var(--red);
-      border-color: var(--red);
-      background: rgba(255, 91, 77, 0.08);
-    }
-
-    .status-arrived .status-badge,
-    .status-landed .status-badge {
-      color: var(--cyan);
-      border-color: var(--cyan);
-      background: rgba(95, 224, 208, 0.08);
-    }
-
-    .leg {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      font-size: 0.86rem;
-      padding: 2px 0;
-      border-top: 1px dashed var(--board-line);
-    }
-
-    .leg + .leg {
-      border-top: none;
-    }
-
-    .airline-line {
-      color: var(--paper-dim);
-      font-size: 0.78rem;
-      letter-spacing: 0.03em;
-      margin-bottom: 8px;
-    }
-
-    .leg-label {
-      display: flex;
-      align-items: baseline;
-      gap: 0.4em;
-      min-width: 0;
-      color: var(--paper-dim);
-      letter-spacing: 0.03em;
-    }
-
-    .leg-dir {
-      flex: 0 0 auto;
-      color: var(--amber);
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      white-space: nowrap;
-    }
-
-    .leg-airport-name {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .leg-value {
-      flex: 0 0 auto;
-      display: inline-block;
-      text-align: right;
-      white-space: nowrap;
+    .mono {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
       font-variant-numeric: tabular-nums;
     }
 
-    .leg-time {
-      color: var(--paper);
-    }
-
-    .leg-time.revised {
-      color: var(--amber);
-      font-weight: 600;
-    }
-
-    .leg-was {
-      display: block;
-      font-size: 0.7rem;
-      color: var(--paper-dim);
-      text-decoration: line-through;
-      text-decoration-color: var(--red);
-      margin-top: 1px;
-    }
-
-    .row-footer {
+    /* ============ CHROME ============ */
+    .chrome {
+      height: 43px;
+      flex: none;
       display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-top: 10px;
+      align-items: center;
+      gap: 12px;
+      padding: 0 var(--gutter);
+      border-bottom: 1px solid var(--hairline);
+    }
+    .wordmark {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.20em; color: var(--brass);
+    }
+    .chrome .spacer { flex: 1; }
+    #clock {
+      font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+      letter-spacing: 0.06em; color: var(--ink-2); font-variant-numeric: tabular-nums;
+    }
+    .icon-btn {
+      background: none; border: 0; padding: 0; cursor: pointer;
+      display: inline-flex; align-items: center; color: var(--ink-2);
+    }
+    .icon-btn:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+    .ico { width: 17px; height: 17px; stroke-width: 1.75; fill: none; stroke: currentColor;
+           stroke-linecap: round; stroke-linejoin: round; }
+    .ico-sm { width: 11px; height: 11px; stroke-width: 2; }
+    .ico-md { width: 15px; height: 15px; stroke-width: 2; }
+    .ico-lg { width: 18px; height: 18px; stroke-width: 1.75; }
+    #bell-btn.unread { color: var(--alert-text); }
+
+    /* ============ SHARED TYPE ROLES ============ */
+    .eyebrow {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: var(--ink-2);
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      color: var(--ok); border: 1px solid var(--ok-border); background: var(--ok-bg);
+      padding: 4px 9px; white-space: nowrap;
+    }
+    .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .chip.is-alert {
+      color: var(--ink); background: var(--alert-fill); border-color: var(--alert-fill);
+    }
+    [data-theme="day"] .chip.is-alert { color: #FFFFFF; }
+    .chip.is-landed {
+      color: var(--ink-2); border-color: var(--hairline-strong); background: transparent;
+    }
+    .chip.is-unknown {
+      color: var(--ink-2); border: 1px dashed var(--border-dashed); background: transparent;
+    }
+    [data-density="board"] .chip { border-radius: 3px; }
+    [data-density="card"]  .chip { border-radius: 999px; padding: 5px 10px; }
+
+    .tag {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.10em; color: var(--ink-2);
+      border: 1px dashed var(--border-dashed); border-radius: 2px; padding: 2px 5px;
+    }
+    .tag-updated {
+      background: var(--brass-fill); color: var(--brass-ink); border: 0; border-radius: 3px;
     }
 
-    .next-event {
-      font-size: 0.75rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--cyan);
+    /* ============ HERO ============ */
+    .hero {
+      background: var(--panel);
+      display: flex; flex-direction: column; gap: 11px;
     }
-
-    .next-event[data-past="true"] {
-      color: var(--paper-dim);
+    [data-density="board"] .hero {
+      padding: 14px var(--gutter) 16px;
+      border-bottom: 1px solid var(--hairline);
     }
+    [data-density="card"] .hero {
+      border-radius: 16px;
+      padding: 20px 20px 18px;
+    }
+    .hero.is-alert { background: var(--hero-alert-bg); }
+    [data-density="board"] .hero.is-alert { border-left: 3px solid var(--alert-accent); }
+    [data-density="card"]  .hero.is-alert { box-shadow: inset 3px 0 0 var(--alert-accent); }
 
-    .remove-btn {
-      background: none;
-      border: none;
-      color: var(--paper-dim);
-      cursor: pointer;
+    .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pax-name {
+      font-size: 19px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);
+    }
+    [data-density="card"] .pax-name { font-size: 21px; display: block; }
+    .pax-meta { font-size: 12px; color: var(--ink-2); }
+    [data-density="card"] .pax-meta { font-size: 12.5px; display: block; margin-top: 2px; }
+    [data-density="board"] .pax-block { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+
+    .flight-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .flight-code {
+      font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 600;
+      letter-spacing: 0.04em; color: var(--brass);
+    }
+    .route { font-size: 12.5px; color: var(--ink-2); }
+
+    .hero-bottom {
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+      margin-top: 3px;
+    }
+    .hero-time {
       font-family: "IBM Plex Mono", monospace;
-      font-size: 0.75rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 0;
+      font-size: 62px; font-weight: var(--mono-weight);
+      line-height: 0.92; letter-spacing: -0.03em; color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      display: flex; align-items: flex-end; gap: 7px;
+    }
+    .meridiem {
+      font-size: 18px; font-weight: 500; letter-spacing: 0; color: var(--ink-2); line-height: 1.6;
+    }
+    .hero-was {
+      font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-2);
+      margin-top: 5px;
+    }
+    .hero-was s { text-decoration: line-through; text-decoration-color: var(--alert-accent); }
+    .countdown { text-align: right; display: flex; flex-direction: column; gap: 4px; flex: none; }
+    .cd-value {
+      font-family: "IBM Plex Mono", monospace; font-size: 26px; font-weight: var(--mono-weight);
+      color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1;
+    }
+    .cd-value.is-stale { color: var(--ink-2); font-size: 22px; }
+
+    /* ============ INSTRUMENTS ============ */
+    .cell-label {
+      display: flex; align-items: center; gap: 5px; margin-bottom: 3px;
+      font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--ink-2);
+    }
+    .cell-value {
+      font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: var(--mono-weight);
+      color: var(--ink); line-height: 1;
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
     }
 
-    .remove-btn:hover { color: var(--red); }
-    .remove-btn::before { content: "[ "; }
-    .remove-btn::after { content: " ]"; }
+    [data-density="board"] .instruments {
+      display: flex;
+      border-top: 1px solid var(--hairline);
+      border-bottom: 1px solid var(--hairline);
+    }
+    [data-density="board"] .instruments .cell {
+      flex: 1; padding: 11px var(--gutter); border-left: 1px solid var(--hairline);
+    }
+    [data-density="board"] .instruments .cell:first-child { border-left: 0; }
+    [data-density="board"] .instruments .cell.wide { flex: 1.15; }
 
-    .empty {
-      color: var(--paper-dim);
-      text-align: center;
-      padding: 50px 10px;
-      font-size: 0.88rem;
-      letter-spacing: 0.04em;
-      border: 1px dashed var(--board-line);
+    [data-density="card"] .instruments { display: flex; gap: 8px; margin-top: 3px; }
+    [data-density="card"] .instruments .cell {
+      flex: 1; background: var(--panel-raised); border-radius: 10px; padding: 10px 12px;
+    }
+    [data-density="card"] .instruments .cell.wide { flex: 1.3; }
+    [data-density="card"] .cell-label { letter-spacing: 0.13em; }
+    [data-density="card"] .cell-value { font-size: 20px; }
+
+    .cell.is-alert {
+      background: var(--cell-alert-bg);
+      outline: 1px solid var(--alert-accent); outline-offset: -1px;
+    }
+    .cell.is-alert .cell-label { color: var(--alert-text); }
+    .cell-was {
+      font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 400;
+      color: var(--ink-struck); text-decoration: line-through;
     }
 
-    .empty .cursor {
-      display: inline-block;
-      width: 8px;
-      height: 1em;
-      background: var(--amber);
-      vertical-align: -2px;
-      margin-left: 4px;
-      animation: blink 1s steps(1) infinite;
+    /* ============ LEAVE BY ============ */
+    .leaveby {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--leaveby-bg); color: var(--brass);
+    }
+    [data-density="board"] .leaveby {
+      border-left: 3px solid var(--brass-fill);
+      border-bottom: 1px solid var(--hairline);
+      padding: 12px var(--gutter);
+    }
+    [data-density="card"] .leaveby {
+      border: 1px solid var(--brass-fill); border-radius: 14px; padding: 15px 18px; gap: 14px;
+    }
+    .leaveby .spacer { flex: 1; }
+    .lb-stack { display: flex; }
+    [data-density="board"] .lb-stack { align-items: baseline; gap: 12px; }
+    [data-density="card"]  .lb-stack { flex-direction: column; gap: 5px; }
+    .lb-label { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: var(--brass); }
+    .lb-time {
+      font-family: "IBM Plex Mono", monospace; font-size: 24px; font-weight: 700;
+      color: var(--brass); font-variant-numeric: tabular-nums; line-height: 1;
+    }
+    [data-density="card"] .lb-time { font-size: 26px; }
+    .lb-deriv {
+      font-size: 10.5px; line-height: 1.35; color: var(--ink-2); text-align: right;
+      background: none; border: 0; font-family: inherit; cursor: pointer; padding: 0;
+    }
+    .lb-deriv:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+
+    /* ============ LIST ============ */
+    .list-header {
+      display: flex; align-items: center; gap: 10px; padding: 16px var(--gutter) 8px;
+    }
+    /* In card density the column wrapper already supplies the gutter. */
+    [data-density="card"] .list-header { padding-left: 0; padding-right: 0; }
+    [data-density="card"] .cards { padding: 0; }
+    .list-header .rule { flex: 1; height: 1px; background: var(--hairline); }
+    .list-header .count {
+      font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600;
+      letter-spacing: 0.10em; color: var(--ink-2);
+    }
+
+    /* Board rows */
+    .row {
+      height: 46px; padding: 0 var(--gutter); border-top: 1px solid var(--hairline);
+      display: flex; align-items: center; gap: 12px;
+      background: none; border-left: 0; border-right: 0; border-bottom: 0;
+      width: 100%; font-family: inherit; color: inherit; cursor: pointer; text-align: left;
+    }
+    .row:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
+    .row .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--ok); flex: none; }
+    .row.is-delayed .dot { background: var(--alert-accent); }
+    .row.is-landed { opacity: 0.55; }
+    .row.is-landed .dot { background: var(--ink-2); }
+    .row .code {
+      width: 62px; flex: none;
+      font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600;
+      letter-spacing: 0.03em; color: var(--ink);
+    }
+    .row .meta {
+      flex: 1; min-width: 0; font-size: 12px; color: var(--ink-2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .row .time {
+      font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 600;
+      color: var(--ink); font-variant-numeric: tabular-nums;
+    }
+    .row.is-delayed .time { color: var(--alert-text); }
+    .row .delta {
+      width: 44px; flex: none; text-align: right;
+      font-size: 9.5px; font-weight: 700; letter-spacing: 0.10em; color: var(--ink-2);
+    }
+    .row.is-delayed .delta { color: var(--alert-text); }
+
+    /* Card list */
+    .cards { display: flex; flex-direction: column; gap: 14px; padding: 0 var(--gutter); }
+    .fcard {
+      background: var(--card); border-radius: 12px; padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 6px;
+      border: 0; width: 100%; font-family: inherit; color: inherit; cursor: pointer;
+      text-align: left;
+    }
+    .fcard:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+    .fcard.is-delayed { border-left: 3px solid var(--alert-accent); }
+    .fcard.is-landed { opacity: 0.55; }
+    .fcard-line { display: flex; align-items: baseline; gap: 9px; }
+    .fcard-line .spacer { flex: 1; }
+    .fcard .code {
+      font-family: "IBM Plex Mono", monospace; font-size: 13.5px; font-weight: 600;
+      letter-spacing: 0.03em; color: var(--ink);
+    }
+    .fcard .who { font-size: 13px; color: var(--ink); }
+    .fcard .state { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; color: var(--ok); }
+    .fcard.is-delayed .state { color: var(--alert-text); }
+    .fcard.is-landed .state { color: var(--ink-2); }
+    .fcard .sub { font-size: 12px; color: var(--ink-2); }
+    .fcard .time {
+      font-family: "IBM Plex Mono", monospace; font-size: 15px; font-weight: 600;
+      color: var(--ink); font-variant-numeric: tabular-nums;
+    }
+    .fcard.is-delayed .time { color: var(--alert-text); }
+
+    /* ============ FOOTER CTA ============ */
+    .footer-cta { margin-top: auto; border-top: 1px solid var(--hairline); }
+    [data-density="board"] .footer-cta { padding: 14px var(--gutter) 44px; }
+    [data-density="card"]  .footer-cta { padding: 14px var(--gutter) 44px; }
+    .cta {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 9px;
+      background: transparent; border: 1px solid var(--brass-fill); color: var(--brass);
+      font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.14em;
+      cursor: pointer;
+    }
+    [data-density="board"] .cta { height: 46px; border-radius: 4px; }
+    [data-density="card"]  .cta { height: 48px; border-radius: 12px; }
+    .cta:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+    .cta.filled {
+      background: var(--brass-fill); color: var(--brass-ink); border-color: var(--brass-fill);
+    }
+    [data-theme="day"] .cta.filled { background: #101E36; color: #FFFFFF; border-color: #101E36; }
+
+    /* ============ STATES ============ */
+    .warn-strip {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--warn-strip); border-bottom: 1px solid var(--hairline);
+      padding: 12px var(--gutter);
+      font-size: 12px; line-height: 1.55; color: var(--ink-warn);
+    }
+    .warn-strip svg { color: var(--brass); flex: none; margin-top: 1px; width: 15px; height: 15px;
+                      stroke-width: 2; fill: none; stroke: currentColor;
+                      stroke-linecap: round; stroke-linejoin: round; }
+    .warn-strip .mono { color: var(--ink); }
+
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      padding: 60px 40px; text-align: center;
+    }
+    .empty-state svg {
+      width: 34px; height: 34px; color: var(--hairline-strong); stroke-width: 1.25;
+      fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .empty-state h2 { margin: 0; font-size: 19px; font-weight: 600; color: var(--ink); }
+    .empty-state p {
+      margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty;
+    }
+
+    /* ============ SHEETS ============ */
+    .sheet {
+      position: fixed; inset: 0; z-index: 40;
+      background: var(--page);
+      display: flex; flex-direction: column;
+      overflow-y: auto;
+    }
+    .sheet[hidden] { display: none; }
+    .sheet-head {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 var(--gutter); height: 52px; flex: none;
+      border-bottom: 1px solid var(--hairline);
+      position: sticky; top: 0; background: var(--page); z-index: 1;
+    }
+    .sheet-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+    .sheet-head .spacer { flex: 1; }
+    .text-btn {
+      background: none; border: 0; cursor: pointer; padding: 0;
+      font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+      color: var(--ink-2);
+    }
+    .sheet-body { padding: 20px var(--gutter) 44px; display: flex; flex-direction: column; gap: 14px; }
+
+    .field { display: flex; flex-direction: column; gap: 7px; }
+    .field > label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: var(--ink-2);
+    }
+    .field .opt { font-weight: 500; letter-spacing: 0.04em; text-transform: none; }
+    .input {
+      width: 100%; background: var(--panel); border: 1px solid var(--hairline);
+      border-radius: 4px; padding: 12px 14px; color: var(--ink);
+      font-family: "Instrument Sans", system-ui, sans-serif; font-size: 14px;
+    }
+    .input::placeholder { color: var(--ink-2); }
+    .input:focus { outline: none; border-color: var(--brass-fill); }
+    .input.mono-input {
+      font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .input[type="date"] { color-scheme: dark; }
+    [data-theme="day"] .input[type="date"] { color-scheme: light; }
+    textarea.input { min-height: 48px; resize: vertical; }
+    .field-error { font-size: 11.5px; color: var(--alert-text); min-height: 1em; }
+    .submit {
+      height: 48px; width: 100%; border: 0; border-radius: 4px;
+      background: var(--brass-fill); color: var(--brass-ink);
+      font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.14em;
+      cursor: pointer; margin-top: 4px;
+    }
+    .submit:disabled { opacity: 0.45; cursor: default; }
+
+    .set-group { display: flex; flex-direction: column; }
+    .set-eyebrow { padding: 20px 0 8px; }
+    .set-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 0; border-top: 1px solid var(--hairline);
+      font-size: 13px; color: var(--ink);
+    }
+    .set-row .spacer { flex: 1; }
+    .set-row .lbl { color: var(--ink-2); font-size: 12.5px; }
+    .set-value {
+      font-family: "IBM Plex Mono", monospace; font-size: 15px; font-weight: 600;
+      color: var(--ink); font-variant-numeric: tabular-nums;
+    }
+    .set-value.brass { color: var(--brass); letter-spacing: 0.1em; font-size: 17px; }
+    .mini-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: none; border: 1px solid var(--hairline-strong); border-radius: 4px;
+      padding: 7px 11px; cursor: pointer; color: var(--ink-2);
+      font-family: inherit; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    }
+    .mini-btn:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+    .num-input {
+      width: 76px; text-align: right;
+      background: var(--panel); border: 1px solid var(--hairline); border-radius: 4px;
+      padding: 8px 10px; color: var(--ink);
+      font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .num-input:focus { outline: none; border-color: var(--brass-fill); }
+
+    .seg { display: flex; gap: 6px; }
+    .seg button {
+      flex: 1; padding: 11px 8px; border-radius: 4px; cursor: pointer;
+      background: var(--panel); border: 1px solid var(--hairline); color: var(--ink-2);
+      font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.10em;
+    }
+    .seg button[aria-pressed="true"] {
+      background: var(--brass-fill); border-color: var(--brass-fill); color: var(--brass-ink);
+    }
+    .seg button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+    .seg-help { font-size: 11.5px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+
+    .code-warn {
+      display: flex; gap: 10px; align-items: flex-start;
+      background: var(--warn-strip); border-radius: 4px; padding: 12px;
+      font-size: 12px; line-height: 1.55; color: var(--ink-warn); margin-top: 12px;
+    }
+    .code-warn svg { color: var(--brass); flex: none; margin-top: 1px; width: 15px; height: 15px;
+                     stroke-width: 2; fill: none; stroke: currentColor;
+                     stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ============ PULL TO REFRESH ============ */
+    #pull-refresh {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      height: 56px; transform: translateY(-56px);
+      font-size: 11px; font-weight: 700; letter-spacing: 0.16em;
+      color: var(--brass);
+      background: linear-gradient(to bottom, var(--page) 60%, transparent);
+      pointer-events: none;
+    }
+    #pull-refresh.dragging { transition: none; }
+    #pull-refresh.settling { transition: transform 0.25s ease; }
+    #pull-refresh .pull-icon {
+      width: 14px; height: 14px; border: 2px solid var(--hairline-strong);
+      border-top-color: var(--brass); border-radius: 50%;
+      transition: transform 0.15s ease;
+    }
+    #pull-refresh.ready .pull-icon { transform: rotate(180deg); }
+    #pull-refresh.refreshing .pull-icon { animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ============ MOTION — the only animation in the system ============ */
+    @keyframes fw-flip {
+      0%   { transform: rotateX(-88deg); opacity: 0; }
+      100% { transform: rotateX(0deg);   opacity: 1; }
+    }
+    @keyframes fw-fade { 0% { opacity: 0; } 100% { opacity: 1; } }
+    .flip {
+      animation: fw-flip 0.32s cubic-bezier(.2,0,.2,1) both;
+      transform-origin: top center;
+    }
+    .flip-delayed { animation-delay: 0.1s; }
+    @media (prefers-reduced-motion: reduce) {
+      .flip { animation-name: fw-fade; }
+      #pull-refresh.refreshing .pull-icon { animation: none; }
+    }
+
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
     }
   </style>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></symbol><symbol id="i-bell-ring" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /><path d="M4 2C2.8 3.7 2 5.7 2 8" /><path d="M22 8c0-2.3-.8-4.3-2-6" /></symbol><symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></symbol><symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /><circle cx="12" cy="10" r="3" /></symbol><symbol id="i-door-open" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14" /><path d="M2 20h3" /><path d="M13 20h9" /><path d="M10 12v.01" /><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z" /></symbol><symbol id="i-luggage" viewBox="0 0 24 24"><path d="M6 20a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2" /><path d="M8 18V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v14" /><path d="M10 20h4" /><circle cx="16" cy="20" r="2" /><circle cx="8" cy="20" r="2" /></symbol><symbol id="i-car" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /><circle cx="7" cy="17" r="2" /><path d="M9 17h6" /><circle cx="17" cy="17" r="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /><path d="M12 5v14" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol><symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M12 20h.01" /><path d="M8.5 16.429a5 5 0 0 1 7 0" /><path d="M5 12.859a10 10 0 0 1 5.17-2.69" /><path d="M19 12.859a10 10 0 0 0-2.007-1.523" /><path d="M2 8.82a15 15 0 0 1 4.177-2.643" /><path d="M22 8.82a15 15 0 0 0-11.288-3.764" /><path d="m2 2 20 20" /></symbol><symbol id="i-plane-landing" viewBox="0 0 24 24"><path d="M2 22h20" /><path d="M3.77 10.77 2 9l2-4.5 1.1.55c.55.28.9.84.9 1.45s.35 1.17.9 1.45L8 8.5l3-6 1.05.53a2 2 0 0 1 1.09 1.52l.72 5.4a2 2 0 0 0 1.09 1.52l4.4 2.2c.42.22.78.55 1.01.96l.6 1.03c.49.88-.06 1.98-1.06 2.1l-1.18.15c-.47.06-.95-.02-1.37-.24L4.29 11.15a2 2 0 0 1-.52-.38Z" /></symbol></defs></svg>
+
   <div id="pull-refresh"><span class="pull-icon"></span><span class="pull-label">Pull to refresh</span></div>
-  <main>
-    <header class="masthead">
-      <h1>FLIGHT<br />WATCH</h1>
-      <div class="clock-wrap">
-        <span><span class="live-dot"></span>LIVE</span>
-        <span id="clock">--:--:--</span>
-      </div>
+
+  <div class="app" id="app" data-density="board">
+    <header class="chrome">
+      <span class="wordmark">FLIGHTWATCH</span>
+      <span class="spacer"></span>
+      <span id="clock">--:--</span>
+      <button class="icon-btn" id="bell-btn" type="button" aria-label="Changes">
+        <svg class="ico"><use href="#i-bell" /></svg>
+      </button>
+      <button class="icon-btn" id="settings-btn" type="button" aria-label="Settings">
+        <svg class="ico"><use href="#i-settings" /></svg>
+      </button>
     </header>
 
-    <section class="list-bar">
-      <div class="list-item">
-        <span class="list-label">Your code</span>
-        <span class="list-value" id="list-code-display">····</span>
-        <button type="button" class="mini-btn" id="copy-code-btn">Copy</button>
-      </div>
-      <div class="list-item">
-        <span class="list-label">Notify topic</span>
-        <span class="list-value" id="ntfy-topic-display">····</span>
-        <button type="button" class="mini-btn" id="copy-topic-btn">Copy</button>
-      </div>
-      <button type="button" class="mini-btn mini-btn-standalone" id="switch-code-btn">Use a different code</button>
-      <form id="switch-code-form" hidden>
-        <input id="switch-code-input" placeholder="Paste a list code" autocapitalize="off" autocorrect="off" />
-        <button type="submit" class="mini-btn mini-btn-standalone">Switch</button>
-      </form>
-    </section>
-    <p class="hint hint-warning">
-      This code is the only way back to your list — clearing browser data or losing it means starting over, with no recovery.
-    </p>
+    <main id="main"></main>
 
-    <form id="add-form">
-      <input id="flight-number" placeholder="Flight no. e.g. QF12" required autocapitalize="characters" />
-      <input id="flight-date" type="date" required />
-      <button type="submit">Track</button>
+    <div class="footer-cta">
+      <button class="cta" id="add-btn" type="button">
+        <svg class="ico ico-md"><use href="#i-plus" /></svg>ADD A FLIGHT
+      </button>
+    </div>
+  </div>
+
+  <!-- ============ ADD SHEET ============ -->
+  <div class="sheet" id="add-sheet" hidden role="dialog" aria-modal="true" aria-label="Add a flight">
+    <div class="sheet-head">
+      <span class="sheet-title">Add a flight</span>
+      <span class="spacer"></span>
+      <button class="text-btn" id="add-cancel" type="button">CANCEL</button>
+    </div>
+    <form class="sheet-body" id="add-form">
+      <div class="field">
+        <label for="f-number">FLIGHT NUMBER</label>
+        <input class="input mono-input" id="f-number" name="flightNumber" placeholder="AA1712"
+               autocapitalize="characters" autocomplete="off" required />
+        <p class="field-error" id="f-error"></p>
+      </div>
+      <div class="field">
+        <label for="f-date">DEPARTURE DATE</label>
+        <input class="input" id="f-date" name="date" type="date" required />
+      </div>
+      <div class="field">
+        <label for="f-passenger">PASSENGER <span class="opt">&mdash; optional</span></label>
+        <input class="input" id="f-passenger" name="passenger" placeholder="R. Whitfield" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-dropoff">DROP-OFF <span class="opt">&mdash; optional</span></label>
+        <input class="input" id="f-dropoff" name="dropOff" placeholder="Grand Cypress Resort" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="f-pax">PASSENGER COUNT <span class="opt">&mdash; optional</span></label>
+        <input class="input" id="f-pax" name="pax" type="number" min="1" max="99" placeholder="2" />
+      </div>
+      <div class="field">
+        <label for="f-note">PICKUP NOTE <span class="opt">&mdash; optional</span></label>
+        <textarea class="input" id="f-note" name="note" placeholder="Two large cases, child seat"></textarea>
+      </div>
+      <button class="submit" id="add-submit" type="submit">TRACK THIS FLIGHT</button>
     </form>
+  </div>
 
-    <div id="flight-list"></div>
-  </main>
+  <!-- ============ SETTINGS SHEET ============ -->
+  <div class="sheet" id="settings-sheet" hidden role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="sheet-head">
+      <span class="sheet-title">Settings</span>
+      <span class="spacer"></span>
+      <button class="text-btn" id="settings-close" type="button">DONE</button>
+    </div>
+    <div class="sheet-body">
+      <div class="set-group">
+        <span class="eyebrow set-eyebrow">VIEW ON THIS DEVICE</span>
+        <div class="seg" role="group" aria-label="Density">
+          <button type="button" id="den-board" aria-pressed="true">BOARD</button>
+          <button type="button" id="den-card" aria-pressed="false">CARDS</button>
+        </div>
+        <p class="seg-help" style="margin-top:9px">
+          Board fits more flights at once &mdash; better for dispatch. Cards give the next job more
+          room &mdash; better for driving. This is set per device, so a dispatcher and a driver
+          sharing a list can each pick their own.
+        </p>
+        <div class="set-row">
+          <span class="lbl">Daylight theme</span>
+          <span class="spacer"></span>
+          <div class="seg" style="flex:0 0 auto">
+            <button type="button" id="theme-auto" aria-pressed="true">AUTO</button>
+            <button type="button" id="theme-night" aria-pressed="false">NIGHT</button>
+            <button type="button" id="theme-day" aria-pressed="false">DAY</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <span class="eyebrow set-eyebrow">AIRPORTS &amp; DRIVE TIME</span>
+        <div id="drive-rows"></div>
+        <p class="seg-help" id="drive-empty" hidden>
+          Drive times appear here once you are tracking a flight, one row per arrival airport.
+        </p>
+        <div class="set-row">
+          <span class="lbl">Buffer</span>
+          <span class="spacer"></span>
+          <input class="num-input" id="buffer-input" type="number" min="0" max="120" step="5" />
+          <span class="lbl">min</span>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <span class="eyebrow set-eyebrow">YOUR LIST</span>
+        <div class="set-row">
+          <span class="lbl">List code</span>
+          <span class="spacer"></span>
+          <span class="set-value brass" id="set-code">&mdash;</span>
+          <button class="mini-btn" id="copy-code" type="button">
+            <svg class="ico ico-sm"><use href="#i-copy" /></svg>COPY
+          </button>
+        </div>
+        <div class="set-row">
+          <span class="lbl">Notify topic</span>
+          <span class="spacer"></span>
+          <span class="set-value" id="set-topic" style="font-size:13px">&mdash;</span>
+          <button class="mini-btn" id="copy-topic" type="button">
+            <svg class="ico ico-sm"><use href="#i-copy" /></svg>COPY
+          </button>
+        </div>
+        <div class="code-warn">
+          <svg><use href="#i-triangle-alert" /></svg>
+          <span>This code is the only way back to your list. Clearing browser data or losing it
+          means starting over &mdash; there is no recovery.</span>
+        </div>
+        <div class="set-row">
+          <span class="lbl">Use a different code</span>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="switch-code" type="button">SWITCH</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
-  <script>
-    function tickClock() {
-      const el = document.getElementById("clock");
-      if (el) el.textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });
-    }
-    tickClock();
-    setInterval(tickClock, 1000);
-  </script>
 </body>
 </html>
