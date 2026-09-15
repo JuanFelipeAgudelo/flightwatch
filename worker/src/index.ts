@@ -1,16 +1,77 @@
 import { diffFlightStatus, fetchFlightStatus } from "./aerodatabox";
 import { sendNtfyNotification } from "./ntfy";
-import { Env, FlightStatus, TrackedFlight, flightKey } from "./types";
+import {
+  ALL_TRACKED_KEY,
+  Env,
+  FlightStatus,
+  ListData,
+  TrackedFlight,
+  flightKey,
+  listKey,
+  trackersKey,
+} from "./types";
 
-const TRACKED_LIST_KEY = "tracked-flights";
+function sameFlight(a: TrackedFlight, b: TrackedFlight): boolean {
+  return a.flightNumber === b.flightNumber && a.date === b.date;
+}
 
-async function getTrackedFlights(env: Env): Promise<TrackedFlight[]> {
-  const raw = await env.FLIGHT_DATA.get(TRACKED_LIST_KEY);
+function randomHex(bytes: number): string {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function getList(env: Env, code: string): Promise<ListData | null> {
+  const raw = await env.FLIGHT_DATA.get(listKey(code));
+  return raw ? (JSON.parse(raw) as ListData) : null;
+}
+
+async function saveList(env: Env, code: string, data: ListData): Promise<void> {
+  await env.FLIGHT_DATA.put(listKey(code), JSON.stringify(data));
+}
+
+async function getAllTracked(env: Env): Promise<TrackedFlight[]> {
+  const raw = await env.FLIGHT_DATA.get(ALL_TRACKED_KEY);
   return raw ? JSON.parse(raw) : [];
 }
 
-async function saveTrackedFlights(env: Env, flights: TrackedFlight[]): Promise<void> {
-  await env.FLIGHT_DATA.put(TRACKED_LIST_KEY, JSON.stringify(flights));
+async function saveAllTracked(env: Env, flights: TrackedFlight[]): Promise<void> {
+  await env.FLIGHT_DATA.put(ALL_TRACKED_KEY, JSON.stringify(flights));
+}
+
+async function getTrackers(env: Env, flight: TrackedFlight): Promise<string[]> {
+  const raw = await env.FLIGHT_DATA.get(trackersKey(flight));
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveTrackers(env: Env, flight: TrackedFlight, codes: string[]): Promise<void> {
+  const key = trackersKey(flight);
+  if (codes.length === 0) {
+    await env.FLIGHT_DATA.delete(key);
+  } else {
+    await env.FLIGHT_DATA.put(key, JSON.stringify(codes));
+  }
+}
+
+async function addToAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
+  const all = await getAllTracked(env);
+  if (!all.some((f) => sameFlight(f, flight))) {
+    all.push(flight);
+    await saveAllTracked(env, all);
+  }
+}
+
+// Drops a flight from the global poll set once nobody's list references it anymore,
+// so cron stops burning AeroDataBox quota on abandoned flights.
+async function removeFromAllTrackedIfOrphaned(env: Env, flight: TrackedFlight): Promise<void> {
+  const trackers = await getTrackers(env, flight);
+  if (trackers.length > 0) return;
+  const all = await getAllTracked(env);
+  const remaining = all.filter((f) => !sameFlight(f, flight));
+  if (remaining.length !== all.length) {
+    await saveAllTracked(env, remaining);
+  }
+  await env.FLIGHT_DATA.delete(flightKey(flight));
 }
 
 function corsHeaders(): HeadersInit {
@@ -36,52 +97,79 @@ export default {
       return new Response(null, { headers: corsHeaders() });
     }
 
-    // GET /api/flights — list tracked flights + their last known status
+    // POST /api/register — first-visit call: creates a private list + its own ntfy topic
+    if (request.method === "POST" && url.pathname === "/api/register") {
+      const listCode = randomHex(4);
+      const ntfyTopic = `flightwatch-${randomHex(5)}`;
+      await saveList(env, listCode, { ntfyTopic, flights: [] });
+      return json({ listCode, ntfyTopic });
+    }
+
+    // GET /api/flights?listCode=xxx — this list's tracked flights + last known status
     if (request.method === "GET" && url.pathname === "/api/flights") {
-      const tracked = await getTrackedFlights(env);
-      const withStatus = await Promise.all(
-        tracked.map(async (f) => {
+      const listCode = url.searchParams.get("listCode");
+      if (!listCode) return json({ error: "listCode is required" }, 400);
+
+      const list = await getList(env, listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const entries = await Promise.all(
+        list.flights.map(async (f) => {
           const raw = await env.FLIGHT_DATA.get(flightKey(f));
           return { flight: f, status: raw ? (JSON.parse(raw) as FlightStatus) : null };
         })
       );
-      return json(withStatus);
+      return json({ ntfyTopic: list.ntfyTopic, entries });
     }
 
-    // POST /api/flights — add a flight to track: { flightNumber, date }
+    // POST /api/flights — add a flight to a list: { listCode, flightNumber, date }
     if (request.method === "POST" && url.pathname === "/api/flights") {
-      const body = (await request.json()) as TrackedFlight;
-      if (!body.flightNumber || !body.date) {
-        return json({ error: "flightNumber and date are required" }, 400);
+      const body = (await request.json()) as TrackedFlight & { listCode?: string };
+      if (!body.listCode || !body.flightNumber || !body.date) {
+        return json({ error: "listCode, flightNumber and date are required" }, 400);
       }
 
-      const tracked = await getTrackedFlights(env);
-      const exists = tracked.some(
-        (f) => f.flightNumber === body.flightNumber && f.date === body.date
-      );
-      if (!exists) {
-        tracked.push({ flightNumber: body.flightNumber, date: body.date });
-        await saveTrackedFlights(env, tracked);
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const flight: TrackedFlight = { flightNumber: body.flightNumber, date: body.date };
+      if (!list.flights.some((f) => sameFlight(f, flight))) {
+        list.flights.push(flight);
+        await saveList(env, body.listCode, list);
+      }
+
+      await addToAllTracked(env, flight);
+      const trackers = await getTrackers(env, flight);
+      if (!trackers.includes(body.listCode)) {
+        trackers.push(body.listCode);
+        await saveTrackers(env, flight, trackers);
       }
 
       // Fetch immediately so the UI has something to show without waiting for the next cron tick.
-      const status = await fetchFlightStatus(env.AERODATABOX_KEY, body);
+      const status = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
       if (status) {
-        await env.FLIGHT_DATA.put(flightKey(body), JSON.stringify(status));
+        await env.FLIGHT_DATA.put(flightKey(flight), JSON.stringify(status));
       }
 
-      return json({ flight: body, status });
+      return json({ flight, status });
     }
 
-    // DELETE /api/flights — stop tracking: { flightNumber, date }
+    // DELETE /api/flights — stop tracking: { listCode, flightNumber, date }
     if (request.method === "DELETE" && url.pathname === "/api/flights") {
-      const body = (await request.json()) as TrackedFlight;
-      const tracked = await getTrackedFlights(env);
-      const remaining = tracked.filter(
-        (f) => !(f.flightNumber === body.flightNumber && f.date === body.date)
-      );
-      await saveTrackedFlights(env, remaining);
-      await env.FLIGHT_DATA.delete(flightKey(body));
+      const body = (await request.json()) as TrackedFlight & { listCode?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const flight: TrackedFlight = { flightNumber: body.flightNumber, date: body.date };
+      list.flights = list.flights.filter((f) => !sameFlight(f, flight));
+      await saveList(env, body.listCode, list);
+
+      const trackers = (await getTrackers(env, flight)).filter((c) => c !== body.listCode);
+      await saveTrackers(env, flight, trackers);
+      await removeFromAllTrackedIfOrphaned(env, flight);
+
       return json({ ok: true });
     }
 
@@ -89,7 +177,7 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
-    const tracked = await getTrackedFlights(env);
+    const tracked = await getAllTracked(env);
 
     for (const flight of tracked) {
       try {
@@ -104,10 +192,19 @@ export default {
         await env.FLIGHT_DATA.put(key, JSON.stringify(next));
 
         if (changes.length > 0) {
-          await sendNtfyNotification(
-            env.NTFY_TOPIC,
-            `${flight.flightNumber} — ${next.status}`,
-            changes.join("\n")
+          const trackerCodes = await getTrackers(env, flight);
+          // Multiple list codes can share (or independently land on) the same topic —
+          // dedupe so people don't get the same push twice.
+          const topics = new Set<string>();
+          for (const code of trackerCodes) {
+            const list = await getList(env, code);
+            if (list?.ntfyTopic) topics.add(list.ntfyTopic);
+          }
+
+          await Promise.all(
+            Array.from(topics).map((topic) =>
+              sendNtfyNotification(topic, `${flight.flightNumber} — ${next.status}`, changes.join("\n"))
+            )
           );
         }
       } catch (err) {

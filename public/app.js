@@ -8,6 +8,49 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js");
 }
 
+// Private per-person list: an opaque code generated on first visit and kept in
+// localStorage. No accounts — losing it (cleared storage, new device) means
+// starting a fresh empty list, with no recovery.
+const LS_LIST_CODE = "fw_list_code";
+const LS_NTFY_TOPIC = "fw_ntfy_topic";
+let listCode = localStorage.getItem(LS_LIST_CODE);
+let ntfyTopic = localStorage.getItem(LS_NTFY_TOPIC);
+
+async function ensureList() {
+  if (listCode) return;
+  const res = await fetch(`${API_BASE}/api/register`, { method: "POST" });
+  const data = await res.json();
+  listCode = data.listCode;
+  ntfyTopic = data.ntfyTopic;
+  localStorage.setItem(LS_LIST_CODE, listCode);
+  localStorage.setItem(LS_NTFY_TOPIC, ntfyTopic);
+}
+
+function renderListInfo() {
+  document.getElementById("list-code-display").textContent = listCode;
+  document.getElementById("ntfy-topic-display").textContent = ntfyTopic ?? "—";
+}
+
+function switchToCode(code) {
+  listCode = code.trim();
+  ntfyTopic = null; // unknown until the next successful /api/flights response fills it in
+  localStorage.setItem(LS_LIST_CODE, listCode);
+  localStorage.removeItem(LS_NTFY_TOPIC);
+  renderListInfo();
+  loadFlights();
+}
+
+async function copyToClipboard(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const original = btn.textContent;
+    btn.textContent = "Copied";
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  } catch (err) {
+    console.error("Clipboard write failed:", err);
+  }
+}
+
 // AeroDataBox gives times like "2026-07-23 20:30-04:00" — already local to that
 // specific airport, so we only reformat for readability, never convert timezone.
 function formatFlightTime(raw) {
@@ -126,9 +169,16 @@ const list = document.getElementById("flight-list");
 async function loadFlights() {
   list.innerHTML = `<p class="empty">Loading…</p>`;
   try {
-    const res = await fetch(`${API_BASE}/api/flights`);
+    const res = await fetch(`${API_BASE}/api/flights?listCode=${encodeURIComponent(listCode)}`);
+    if (!res.ok) {
+      list.innerHTML = `<p class="empty">Unknown code — check it and try again.</p>`;
+      return;
+    }
     const data = await res.json();
-    renderFlights(data);
+    ntfyTopic = data.ntfyTopic;
+    localStorage.setItem(LS_NTFY_TOPIC, ntfyTopic);
+    renderListInfo();
+    renderFlights(data.entries);
   } catch (err) {
     list.innerHTML = `<p class="empty">Couldn't reach the server. Is the Worker running?</p>`;
     console.error(err);
@@ -176,7 +226,7 @@ function renderFlights(entries) {
       await fetch(`${API_BASE}/api/flights`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ flightNumber: btn.dataset.number, date: btn.dataset.date }),
+        body: JSON.stringify({ listCode, flightNumber: btn.dataset.number, date: btn.dataset.date }),
       });
       loadFlights();
     });
@@ -195,7 +245,7 @@ form.addEventListener("submit", async (e) => {
     await fetch(`${API_BASE}/api/flights`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ flightNumber, date }),
+      body: JSON.stringify({ listCode, flightNumber, date }),
     });
     numberInput.value = "";
     await loadFlights();
@@ -204,7 +254,34 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-loadFlights();
+(function setupListBar() {
+  document.getElementById("copy-code-btn").addEventListener("click", (e) => copyToClipboard(listCode, e.currentTarget));
+  document.getElementById("copy-topic-btn").addEventListener("click", (e) => copyToClipboard(ntfyTopic, e.currentTarget));
+
+  const switchForm = document.getElementById("switch-code-form");
+  const switchToggle = document.getElementById("switch-code-btn");
+  const switchInput = document.getElementById("switch-code-input");
+
+  switchToggle.addEventListener("click", () => {
+    switchForm.hidden = !switchForm.hidden;
+    if (!switchForm.hidden) switchInput.focus();
+  });
+
+  switchForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const code = switchInput.value.trim();
+    if (!code) return;
+    switchInput.value = "";
+    switchForm.hidden = true;
+    switchToCode(code);
+  });
+})();
+
+(async function init() {
+  await ensureList();
+  renderListInfo();
+  loadFlights();
+})();
 setInterval(tickCountdowns, 30000);
 
 // Custom pull-to-refresh — installed iOS PWAs run standalone with no browser chrome,

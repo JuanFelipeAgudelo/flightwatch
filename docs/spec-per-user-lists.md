@@ -91,14 +91,14 @@ Changes needed:
 - The AeroDataBox polling/diffing logic itself doesn't change — it still operates on
   one deduped set of real-world flights. Only the "who gets told" part changes.
 
-## Open questions for Ash
+## Resolved (was "Open questions for Ash")
 
-1. Should list codes ever expire / clean up automatically (e.g. if untouched for
-   90 days), to avoid orphaned KV entries piling up? AeroDataBox free-tier quota is
-   the real constraint here, not storage.
-2. Any interest in a lightweight "share my list with a friend" (read-only) mode
-   later, distinct from "everyone tracks independently"? Not needed for this spec,
-   but the tracker-index design above would make it easy to add later if wanted.
-3. Confirm: losing/clearing localStorage = losing your list permanently, with no
-   recovery. Acceptable for a personal tool, but worth Ash explicitly signing off on
-   before this ships to friends.
+1. **No auto-expiry.** Quota is the real constraint, not KV storage, so list codes
+   don't expire or get cleaned up. If quota ever gets tight, cap active flights per
+   list instead of deleting inactive lists.
+2. **No read-only sharing mode for now.** The tracker-index design above keeps this
+   easy to add later without rework, but it's out of scope for this pass.
+3. **Confirmed: losing/clearing localStorage = losing your list permanently, no
+   recovery.** Acceptable for a personal utility tool with no accounts/passwords.
+   Surface this clearly in the UI next to the "your code" affordance so it's not a
+   surprise.

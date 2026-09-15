@@ -1,12 +1,18 @@
 export interface Env {
   FLIGHT_DATA: KVNamespace;
   AERODATABOX_KEY: string;
-  NTFY_TOPIC: string;
 }
 
 export interface TrackedFlight {
   flightNumber: string; // e.g. "QF12"
   date: string; // YYYY-MM-DD, local departure date
+}
+
+// One private per-person list, keyed by an opaque list code the client holds
+// in localStorage. Each list has its own ntfy topic so notifications stay private.
+export interface ListData {
+  ntfyTopic: string;
+  flights: TrackedFlight[];
 }
 
 export interface FlightStatus {
@@ -42,3 +48,16 @@ export interface FlightStatus {
 export function flightKey(flight: TrackedFlight): string {
   return `flight:${flight.flightNumber}:${flight.date}`;
 }
+
+// Reverse index: which list codes are currently tracking this flight, so cron
+// can route notifications without scanning every list on every poll.
+export function trackersKey(flight: TrackedFlight): string {
+  return `${flightKey(flight)}:trackers`;
+}
+
+export function listKey(code: string): string {
+  return `list:${code}`;
+}
+
+// Deduped union of every flight anyone is tracking — the set cron actually polls.
+export const ALL_TRACKED_KEY = "all-tracked-flights";
