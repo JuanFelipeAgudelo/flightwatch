@@ -158,10 +158,18 @@ export default {
         await saveTrackers(env, flight, trackers);
       }
 
-      // Fetch immediately so the UI has something to show without waiting for the next cron tick.
-      const status = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
-      if (status) {
-        await env.FLIGHT_DATA.put(flightKey(flight), JSON.stringify(status));
+      // Fetch immediately so the UI has something to show without waiting for the next cron
+      // tick. The flight is already tracked at this point regardless of how this goes, so a
+      // failure here (rate limit, AeroDataBox outage) shouldn't fail the whole request — cron
+      // will pick up a real status once the lookup starts working again.
+      let status: FlightStatus | null = null;
+      try {
+        status = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
+        if (status) {
+          await env.FLIGHT_DATA.put(flightKey(flight), JSON.stringify(status));
+        }
+      } catch (err) {
+        console.error(`Immediate status fetch failed for ${flight.flightNumber} (${flight.date}):`, err);
       }
 
       return json({ flight, status });
