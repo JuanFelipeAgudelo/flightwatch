@@ -19,6 +19,7 @@ const LS_NTFY_TOPIC = "fw_ntfy_topic";
 const LS_DENSITY = "fw_density";
 const LS_THEME = "fw_theme";
 const LS_LAST_GOOD = "fw_last_good";
+const LS_ACKED = "fw_acked_at"; // newest change timestamp the driver has looked at
 
 let listCode = localStorage.getItem(LS_LIST_CODE);
 let ntfyTopic = localStorage.getItem(LS_NTFY_TOPIC);
@@ -28,6 +29,8 @@ let themeMode = localStorage.getItem(LS_THEME) || "auto"; // auto | night | day
 let settings = { driveMinutes: {}, bufferMinutes: 10, showPassengerNames: true };
 let entries = [];
 let offline = false;
+let lastFetchedAt = 0;      // epoch ms of the last successful load
+let lastFetchedIso = null;  // the freshest status timestamp we hold
 // Last rendered values per flight, so a flip animation only plays on what changed.
 const prevValues = new Map();
 
@@ -170,6 +173,61 @@ function leaveByFor(status) {
   return { time: s, drive, buffer: settings.bufferMinutes, iata };
 }
 
+/* --- change tracking --- */
+
+function latestChangeAt(entry) {
+  const list = entry.recentChanges || [];
+  return list.length ? new Date(list[0].at).getTime() : 0;
+}
+
+function acknowledgedAt() {
+  return Number(localStorage.getItem(LS_ACKED) || 0);
+}
+
+// Entries that changed recently and that the driver hasn't looked at yet.
+function unacknowledged() {
+  const acked = acknowledgedAt();
+  return entries.filter((e) => latestChangeAt(e) > acked);
+}
+
+function acknowledgeChanges() {
+  const newest = entries.reduce((max, e) => Math.max(max, latestChangeAt(e)), 0);
+  localStorage.setItem(LS_ACKED, String(newest || Date.now()));
+  renderHome();
+}
+
+// The chip in the changed state names what moved, not just the status.
+function changeChipLabel(entry) {
+  const lines = (entry.recentChanges || []).flatMap((h) => h.changes);
+  const delay = entry.status ? delayMinutes(entry.status.arrival) : null;
+  if (lines.some((l) => /time/i.test(l)) && delay !== null && delay > 0) return `DELAYED ${delay}M`;
+  if (lines.some((l) => /gate/i.test(l))) return "GATE CHANGE";
+  if (lines.some((l) => /terminal/i.test(l))) return "TERMINAL CHANGE";
+  if (lines.some((l) => /cancel/i.test(l))) return "CANCELLED";
+  if (lines.some((l) => /status/i.test(l))) return statusLabel(entry.status);
+  return "UPDATED";
+}
+
+// "Delayed 38m at BOS" — a reason a driver can act on, not a field diff.
+function changeReason(entry) {
+  const lines = (entry.recentChanges || []).flatMap((h) => h.changes);
+  const gate = lines.find((l) => /gate/i.test(l));
+  const time = lines.find((l) => /time/i.test(l));
+  const state = lines.find((l) => /status/i.test(l));
+  const delay = entry.status ? delayMinutes(entry.status.arrival) : null;
+
+  if (delay !== null && delay > 0 && time) {
+    const at = entry.status.departure.airportCode;
+    return `Delayed ${delay}m${at ? ` at ${at}` : ""}`;
+  }
+  if (gate) {
+    const to = gate.split("→").pop().trim();
+    return `Gate ${to}`;
+  }
+  if (state) return state.replace(/^Status changed:\s*/i, "");
+  return lines[0] || "Updated";
+}
+
 function sortEntries(list) {
   const withKey = list.map((e) => ({
     entry: e,
@@ -209,12 +267,12 @@ function heroSubject(flight) {
   return { primary: esc(flight.flightNumber), meta: esc(shortDate(flight.date)) };
 }
 
-function renderHero(entry) {
+function renderHero(entry, hasChanged) {
   const { flight, status } = entry;
   const id = flightId(flight);
   const prev = prevValues.get(id) || {};
   const subject = heroSubject(flight);
-  const sev = severity(status);
+  const sev = hasChanged ? "alert" : severity(status);
 
   if (!status) {
     return `
@@ -246,6 +304,8 @@ function renderHero(entry) {
   const utc = arrivalUtc(status);
   let countdown = "";
   if (offline) {
+    // Never run a live countdown against stale data — that is the one thing
+    // here that would actively mislead someone about when to leave.
     countdown = `<div class="countdown">
         <span class="eyebrow">AS OF</span>
         <span class="cd-value is-stale">${esc(shortTime(status.fetchedAt) || "&mdash;")}</span>
@@ -312,7 +372,11 @@ function renderHero(entry) {
   const heroInner = `
       <div class="hero-top">
         <span class="eyebrow">NEXT PICKUP</span>
-        ${chipFor(status)}
+        ${offline
+          ? `<span class="chip is-unknown">LAST KNOWN</span>`
+          : hasChanged
+            ? `<span class="chip is-alert">${icon("triangle-alert", "ico-sm")}${changeChipLabel(entry)}</span>`
+            : chipFor(status)}
       </div>
       <div class="pax-block">
         <span class="pax-name">${subject.primary}</span>
@@ -330,7 +394,13 @@ function renderHero(entry) {
         ${countdown}
       </div>`;
 
-  const openTag = `<section class="hero${sev === "alert" ? " is-alert" : ""}">`;
+  const heroCls = [
+    "hero",
+    sev === "alert" ? "is-alert" : "",
+    offline ? "is-stale" : "",
+  ].filter(Boolean).join(" ");
+  const openTag = `<section class="${heroCls}"` +
+    ` data-flight="${esc(flight.flightNumber)}" data-date="${esc(flight.date)}" role="button" tabindex="0">`;
   // Board keeps the instrument strip full-bleed below the panel; card insets it
   // into the hero card itself.
   return density === "card"
@@ -409,13 +479,47 @@ function renderEmpty() {
     </div>`;
 }
 
-function renderHome() {
-  if (!entries.length) {
-    main.innerHTML = renderEmpty();
-    document.getElementById("add-btn").classList.add("filled");
+function renderFooter(changed) {
+  const footer = document.querySelector(".footer-cta");
+  if (offline) {
+    footer.innerHTML = `<button class="cta" id="retry-btn" type="button">
+        ${icon("refresh-cw", "ico-md")}TRY AGAIN
+      </button>`;
+    document.getElementById("retry-btn").addEventListener("click", () => loadFlights());
     return;
   }
-  document.getElementById("add-btn").classList.remove("filled");
+  if (changed.length) {
+    // In the changed state the footer reports freshness instead of offering the CTA.
+    const elapsed = lastFetchedAt ? Date.now() - lastFetchedAt : 0;
+    const age = !lastFetchedAt || elapsed < 60000
+      ? "just now"
+      : `${formatDuration(elapsed).toLowerCase()} ago`;
+    footer.innerHTML = `<p class="freshness">${icon("refresh-cw", "ico-md")}
+      Checked ${esc(age)} &middot; pull to refresh</p>`;
+    return;
+  }
+  footer.innerHTML = `<button class="cta${entries.length ? "" : " filled"}" id="add-btn" type="button">
+      ${icon("plus", "ico-md")}ADD A FLIGHT
+    </button>`;
+  document.getElementById("add-btn").addEventListener("click", openAddSheet);
+}
+
+function renderHome() {
+  const changed = offline ? [] : unacknowledged();
+  const bell = document.getElementById("bell-btn");
+  bell.classList.toggle("unread", changed.length > 0);
+  bell.querySelector("use").setAttribute("href", changed.length ? "#i-bell-ring" : "#i-bell");
+
+  // Offline swaps the chrome controls for a plain offline flag.
+  bell.hidden = offline;
+  document.getElementById("settings-btn").hidden = offline;
+  document.getElementById("offline-flag").hidden = !offline;
+
+  if (!entries.length) {
+    main.innerHTML = renderEmpty();
+    renderFooter(changed);
+    return;
+  }
 
   const sorted = sortEntries(entries);
   const hero = sorted[0];
@@ -424,12 +528,29 @@ function renderHome() {
   const staleStrip = offline
     ? `<div class="warn-strip">
          ${icon("triangle-alert")}
-         <span>No connection. Showing the last known data &mdash; times may have moved.</span>
+         <span>No connection. Showing what was true at
+         <span class="mono">${esc(shortTime(lastFetchedIso) || "earlier")}</span>. Times may have moved.</span>
        </div>`
     : "";
 
   let list = "";
-  if (rest.length) {
+  if (changed.length) {
+    // Changed state: the list narrows to what moved, each with a plain-language reason.
+    list = `
+      <div class="list-header">
+        <span class="eyebrow">CHANGED IN THE LAST HOUR</span>
+        <span class="rule"></span>
+        <span class="count">${changed.length}</span>
+      </div>
+      ${changed.map((e) => `
+        <button class="row is-change" type="button" data-flight="${esc(e.flight.flightNumber)}" data-date="${esc(e.flight.date)}">
+          <span class="dot"></span>
+          <span class="code">${esc(e.flight.flightNumber)}</span>
+          <span class="meta">${esc(changeReason(e))}</span>
+          <span class="time">${esc(shortTime(arrivalLocal(e.status)) || "—")}</span>
+        </button>`).join("")}
+      <button class="ack-btn" id="ack-btn" type="button">GOT IT &mdash; SHOW ALL FLIGHTS</button>`;
+  } else if (rest.length) {
     const header = `
       <div class="list-header">
         <span class="eyebrow">ALSO TRACKING</span>
@@ -441,10 +562,156 @@ function renderHome() {
       : header + rest.map(renderBoardRow).join("");
   }
 
-  const body = renderHero(hero) + list;
+  const body = renderHero(hero, changed.some((c) => c.flight === hero.flight)) + list;
   main.innerHTML = staleStrip + (density === "card"
     ? `<div style="padding:14px var(--gutter) 0;display:flex;flex-direction:column;gap:14px">${body}</div>`
     : body);
+
+  const ack = document.getElementById("ack-btn");
+  if (ack) ack.addEventListener("click", acknowledgeChanges);
+
+  renderFooter(changed);
+}
+
+/* ================= FLIGHT DETAIL ================= */
+
+let detailKey = null; // "NUMBER:DATE" of the flight currently open
+
+function legLine(status, side) {
+  const leg = status[side];
+  const arriving = side === "arrival";
+  const bits = [];
+  if (arriving) bits.push(isLanded(status) ? "Landed" : "Arriving");
+  else bits.push(/depart|enroute|landed|arrived/i.test(status.status) ? "Departed" : "Departs");
+  if (leg.terminal) bits.push(`Terminal ${leg.terminal}`);
+  if (leg.gate) bits.push(`gate ${leg.gate}`);
+  const delay = delayMinutes(leg);
+  return {
+    title: esc(leg.airport || leg.airportCode || "—"),
+    sub: esc(bits.join(" · ")),
+    value: esc(shortTime(leg.estimatedTime || leg.scheduledTime) || "—"),
+    late: delay !== null && delay > 0,
+  };
+}
+
+function renderDetail(entry, history) {
+  const { flight, status } = entry;
+  const host = document.getElementById("detail-body");
+
+  document.getElementById("detail-title").textContent = flight.flightNumber;
+  document.getElementById("detail-date").textContent = shortDate(flight.date);
+
+  const pickupRows = [
+    { label: "Passenger", value: flight.passenger },
+    { label: "Drop-off", value: flight.dropOff },
+    { label: "Passengers", value: flight.pax ? `${flight.pax}` : null },
+    { label: "Note", value: flight.note },
+  ].map((r) => `
+      <div class="prow">
+        <span class="prow-label">${r.label}</span>
+        <span class="prow-value${r.value ? "" : " empty"}">${r.value ? esc(r.value) : "Not set"}</span>
+      </div>`).join("");
+
+  let summary = "";
+  let legs = "";
+  let driveRow = "";
+
+  if (status) {
+    const arr = status.arrival;
+    const parts = timeParts(arr.estimatedTime || arr.scheduledTime) || { time: "—", meridiem: "" };
+    const tz = tzAbbreviation(arr.estimatedTime || arr.scheduledTime, arr.timeZone);
+    summary = `
+      <div class="arrival-summary">
+        <div>
+          <span class="eyebrow">ARRIVES ${esc(arr.airportCode || "")}</span>
+          <div class="arrival-time">${parts.time}<span class="arrival-tz">${parts.meridiem}${tz ? " " + esc(tz) : ""}</span></div>
+        </div>
+        ${chipFor(status)}
+      </div>`;
+
+    const dep = legLine(status, "departure");
+    const arrL = legLine(status, "arrival");
+    legs = `
+      <div class="irow">
+        <svg><use href="#i-plane-takeoff" /></svg>
+        <span class="irow-text">
+          <span class="irow-title">${dep.title}</span>
+          <span class="irow-sub">${dep.sub}</span>
+        </span>
+        <span class="irow-value${dep.late ? " is-alert" : ""}">${dep.value}</span>
+      </div>
+      <div class="irow is-arrival">
+        <svg><use href="#i-plane-landing" /></svg>
+        <span class="irow-text">
+          <span class="irow-title">${arrL.title}</span>
+          <span class="irow-sub">${arrL.sub}</span>
+        </span>
+        <span class="irow-value${arrL.late ? " is-alert" : ""}">${arrL.value}</span>
+      </div>`;
+
+    const lb = leaveByFor(status);
+    if (lb && !lb.unset) {
+      driveRow = `
+        <button class="prow" type="button" data-set-drive="${esc(lb.iata)}">
+          <span class="prow-label">Drive + buffer</span>
+          <span class="prow-value">${lb.drive}m to ${esc(lb.iata)} + ${lb.buffer}m &mdash; leave by ${esc(lb.time)}</span>
+          <svg><use href="#i-chevron-right" /></svg>
+        </button>`;
+    } else if (lb && lb.unset) {
+      driveRow = `
+        <button class="prow" type="button" data-set-drive="${esc(lb.iata)}">
+          <span class="prow-label">Drive + buffer</span>
+          <span class="prow-value empty">Set a drive time for ${esc(lb.iata)}</span>
+          <svg><use href="#i-chevron-right" /></svg>
+        </button>`;
+    }
+  } else {
+    summary = `<div class="arrival-summary"><div>
+        <span class="eyebrow">ARRIVES</span>
+        <div class="arrival-time">&mdash;</div>
+      </div>${chipFor(null)}</div>`;
+  }
+
+  const histItems = (history || []).length
+    ? history.map((h) => {
+        const when = new Date(h.at);
+        const label = when.toLocaleString("en-GB", {
+          day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+        });
+        return `<div class="hist-item">
+            <span class="hist-when">${esc(label)}</span>
+            <span class="hist-lines">${h.changes.map(esc).join("<br>")}</span>
+          </div>`;
+      }).join("")
+    : `<p class="hist-empty">Nothing has changed since you started tracking this flight.</p>`;
+
+  host.innerHTML = `
+    ${summary}
+    ${legs}
+    <span class="eyebrow" style="display:block;padding:20px var(--gutter) 8px">PICKUP</span>
+    ${pickupRows}
+    ${driveRow}
+    <span class="eyebrow" style="display:block;padding:20px var(--gutter) 0">HISTORY</span>
+    <div class="hist">${histItems}</div>`;
+}
+
+async function openDetail(flightNumber, date) {
+  const entry = entries.find((e) => e.flight.flightNumber === flightNumber && e.flight.date === date);
+  if (!entry) return;
+  detailKey = `${flightNumber}:${date}`;
+  renderDetail(entry, null);
+  openSheet("detail-sheet");
+
+  try {
+    const res = await fetch(`${API_BASE}/api/history?listCode=${encodeURIComponent(listCode)}` +
+      `&flightNumber=${encodeURIComponent(flightNumber)}&date=${encodeURIComponent(date)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    // Only paint if the user hasn't navigated away while this was in flight.
+    if (detailKey === `${flightNumber}:${date}`) renderDetail(entry, data.history);
+  } catch (err) {
+    console.error("Couldn't load history:", err);
+  }
 }
 
 /* ================= COUNTDOWN ================= */
@@ -481,12 +748,19 @@ async function ensureList() {
   }
 }
 
-function applyPayload(data) {
+function applyPayload(data, fromCache) {
   ntfyTopic = data.ntfyTopic;
   settings = Object.assign({ driveMinutes: {}, bufferMinutes: 10, showPassengerNames: true }, data.settings || {});
   entries = data.entries || [];
+  lastFetchedIso = entries.reduce(
+    (newest, e) => (e.status && e.status.fetchedAt > (newest || "") ? e.status.fetchedAt : newest),
+    null
+  );
   localStorage.setItem(LS_NTFY_TOPIC, ntfyTopic);
-  localStorage.setItem(LS_LAST_GOOD, JSON.stringify(data));
+  if (!fromCache) {
+    lastFetchedAt = Date.now();
+    localStorage.setItem(LS_LAST_GOOD, JSON.stringify(data));
+  }
 }
 
 async function loadFlights() {
@@ -506,7 +780,7 @@ async function loadFlights() {
     const cached = localStorage.getItem(LS_LAST_GOOD);
     if (cached) {
       offline = true;
-      try { applyPayload(JSON.parse(cached)); } catch (_) { /* fall through */ }
+      try { applyPayload(JSON.parse(cached), true); } catch (_) { /* fall through */ }
       renderHome();
     } else {
       main.innerHTML = `<div class="warn-strip">${icon("triangle-alert")}
@@ -655,22 +929,67 @@ document.getElementById("switch-code").addEventListener("click", async () => {
 });
 
 // Tapping the leave-by derivation jumps to that airport's drive-time field.
-main.addEventListener("click", (e) => {
+// Delegated at document level so it works from the detail sheet too.
+document.addEventListener("click", (e) => {
   const setDrive = e.target.closest("[data-set-drive]");
   if (setDrive) {
     syncSettingsSheet();
     openSheet("settings-sheet");
     const field = document.querySelector(`[data-drive="${setDrive.dataset.setDrive}"]`);
     if (field) { field.focus(); field.select(); }
+    return;
+  }
+  const flightEl = e.target.closest("[data-flight]");
+  if (flightEl && main.contains(flightEl)) {
+    openDetail(flightEl.dataset.flight, flightEl.dataset.date);
   }
 });
 
-document.getElementById("add-btn").addEventListener("click", () => {
+// The hero is a section rather than a button (it contains its own leave-by
+// button), so it needs keyboard activation wired up by hand.
+main.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const hero = e.target.closest(".hero[data-flight]");
+  if (!hero) return;
+  e.preventDefault();
+  openDetail(hero.dataset.flight, hero.dataset.date);
+});
+
+document.getElementById("detail-back").addEventListener("click", () => {
+  detailKey = null;
+  closeSheet("detail-sheet");
+});
+
+document.getElementById("detail-delete").addEventListener("click", async () => {
+  if (!detailKey) return;
+  const [flightNumber, date] = detailKey.split(":");
+  const entry = entries.find((x) => x.flight.flightNumber === flightNumber && x.flight.date === date);
+  const who = entry && entry.flight.passenger ? ` (${entry.flight.passenger})` : "";
+  if (!window.confirm(`Stop tracking ${flightNumber}${who}? You'll stop getting its alerts.`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/flights`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listCode, flightNumber, date }),
+    });
+    if (!res.ok) { window.alert("Couldn't stop tracking that flight. Try again."); return; }
+    detailKey = null;
+    closeSheet("detail-sheet");
+    await loadFlights();
+  } catch (err) {
+    console.error(err);
+    window.alert("Couldn't reach the server. Try again.");
+  }
+});
+
+function openAddSheet() {
   document.getElementById("f-error").textContent = "";
   openSheet("add-sheet");
   document.getElementById("f-number").focus();
-});
+}
 document.getElementById("add-cancel").addEventListener("click", () => closeSheet("add-sheet"));
+document.getElementById("bell-btn").addEventListener("click", acknowledgeChanges);
 
 document.getElementById("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();

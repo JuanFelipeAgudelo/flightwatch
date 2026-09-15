@@ -76,6 +76,22 @@ export function trackersKey(flight: TrackedFlight): string {
   return `${flightKey(flight)}:trackers`;
 }
 
+// The change lines cron already computes for ntfy, kept instead of discarded so
+// the flight detail screen can show what moved and when.
+export function historyKey(flight: TrackedFlight): string {
+  return `${flightKey(flight)}:history`;
+}
+
+export interface HistoryEntry {
+  at: string; // ISO instant
+  changes: string[];
+}
+
+export const HISTORY_LIMIT = 20;
+
+// How far back the home screen counts a change as still worth flagging.
+export const RECENT_CHANGE_WINDOW_MS = 60 * 60 * 1000;
+
 export function listKey(code: string): string {
   return `list:${code}`;
 }
