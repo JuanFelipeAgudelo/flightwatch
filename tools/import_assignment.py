@@ -376,10 +376,14 @@ def post_job(list_code, job):
     body = dict(job)
     body["listCode"] = list_code
     body = {k: v for k, v in body.items() if v is not None}
+    # An explicit User-Agent is required: Cloudflare answers 403 to urllib's
+    # default "Python-urllib/3.x" before the Worker ever sees the request, so
+    # the failure looks like an auth error rather than a bot filter.
     req = urllib.request.Request(
         f"{API}/api/flights", method="POST",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"})
+        headers={"Content-Type": "application/json",
+                 "User-Agent": "flightwatch-import/1.0"})
     with urllib.request.urlopen(req) as r:
         return r.status, json.loads(r.read().decode())
 
