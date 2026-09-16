@@ -351,7 +351,10 @@ function renderHero(entry, hasChanged) {
   );
   const route = status.airline ? `${esc(status.airline)} &middot; ${routePair}` : routePair;
 
-  const claim = "&mdash;"; // no claim source yet; an em-dash beats a guess
+  // Real belt from the API when the airport publishes one, em-dash when it
+  // doesn't. No "usual belt" guess: a wrong carousel sends the driver to the
+  // wrong end of the hall, which is worse than showing nothing.
+  const claim = esc(arrLeg.baggageBelt) || "&mdash;";
 
   const lb = leaveByFor(status);
   let leaveby = "";
@@ -622,6 +625,7 @@ function legLine(status, side) {
   else bits.push(/depart|enroute|landed|arrived/i.test(status.status) ? "Departed" : "Departs");
   if (leg.terminal) bits.push(`Terminal ${leg.terminal}`);
   if (leg.gate) bits.push(`gate ${leg.gate}`);
+  if (arriving && leg.baggageBelt) bits.push(`claim ${leg.baggageBelt}`);
   const delay = delayMinutes(leg);
   return {
     title: esc(leg.airport || leg.airportCode || "—"),

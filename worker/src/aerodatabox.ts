@@ -18,6 +18,9 @@ interface AeroDataBoxLeg {
   predictedTime?: { local: string; utc: string };
   terminal?: string;
   gate?: string;
+  // Arriving flights only. The redesign handoff assumed this wasn't available and
+  // specced a hand-maintained "usual belt" guess table; the API does return it.
+  baggageBelt?: string;
 }
 
 // AeroDataBox returns UTC as "2026-07-24 00:30Z" — reshape to a standard ISO
@@ -75,6 +78,7 @@ export async function fetchFlightStatus(
       estimatedTimeUtc: toIsoUtc(f.departure.revisedTime?.utc ?? f.departure.predictedTime?.utc),
       terminal: f.departure.terminal ?? null,
       gate: f.departure.gate ?? null,
+      baggageBelt: null, // arriving flights only
     },
     arrival: {
       airport: f.arrival.airport.name,
@@ -86,6 +90,7 @@ export async function fetchFlightStatus(
       estimatedTimeUtc: toIsoUtc(f.arrival.revisedTime?.utc ?? f.arrival.predictedTime?.utc),
       terminal: f.arrival.terminal ?? null,
       gate: f.arrival.gate ?? null,
+      baggageBelt: f.arrival.baggageBelt ?? null,
     },
     fetchedAt: new Date().toISOString(),
   };
@@ -118,6 +123,19 @@ export function diffFlightStatus(
     if (p.terminal !== n.terminal) {
       changes.push(`${label} terminal changed: ${p.terminal ?? "unknown"} → ${n.terminal ?? "unknown"}`);
     }
+  }
+
+  // A reassigned carousel sends the driver to the wrong end of the hall, so it's
+  // worth a push on its own. Only announce it once it's actually known — going
+  // from nothing to a belt is the belt being published, not a change.
+  const prevBelt = prev.arrival.baggageBelt;
+  const nextBelt = next.arrival.baggageBelt;
+  if (prevBelt !== nextBelt && nextBelt) {
+    changes.push(
+      prevBelt
+        ? `Baggage claim changed: ${prevBelt} → ${nextBelt}`
+        : `Baggage claim: ${nextBelt}`
+    );
   }
 
   return changes;
