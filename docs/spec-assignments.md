@@ -1,6 +1,12 @@
 # Spec: assignment ingest, and generalising beyond flights
 
-Status: **planned, nothing built.** Phase 0 is the next step.
+Status: **Phase 0 complete (2026-09-16). Phase 1 cleared to start.**
+
+The spike parsed all 249 real assignment PDFs cleanly and corrected several
+claims that were wrong in the first draft of this document. Corrections are
+folded in below rather than appended, so what you are reading is current.
+Spike script: `spike/parser.py` (uncommitted — its input PDFs and JSON output
+carry passenger PII and are gitignored).
 
 ## Why
 
@@ -17,9 +23,16 @@ buffer. Flights are just the case where the target time moves on its own.
 ## What the real data says
 
 Sample: 251 PDFs from 250 automated "Transportation Assignment ###" emails,
-**186 unique assignments** after collapsing re-sends. Source zip lives in the
-owner's `Downloads` as `TRNP Assigments.zip` (the extracted copy was in a
-session scratchpad and will not have survived).
+**185 unique assignments**, 36 of them sent more than once. Source zip lives in
+the owner's `Downloads` as `TRNP Assigments.zip`.
+
+> **Dedupe on the assignment number printed inside the PDF — never on the
+> manifest's `assignment` column or the filename.** Those carry some kind of
+> email thread/subject label, not the assignment's identity. Grouping by the
+> filename number produces phantom version chains: the "14 versions of 371135"
+> claimed in the original export notes were mostly *unrelated* assignments
+> (361088, 362478, 357487, 345850 …) that happened to share a thread label.
+> This is load-bearing for any ingest work.
 
 | Category | Assignments | Share |
 |---|---|---|
@@ -50,8 +63,24 @@ Driver notes LGA pickup. Take arriving passenger to WKL
 Then an ordered list of **stops**, each `CODE ETA: <time> ETD: <time> Name | Address`,
 optionally followed by `Pickup:` / `Drop-off:` and a passenger table.
 
-Passenger rows carry a category tag in the left column: **`A`** airport,
-**`MED`** medical, **`S`** shuttle.
+Passenger rows carry a category tag in the left column. There are **eight**, not
+the three the first draft assumed:
+
+| Tag | Meaning | Target-time field |
+|---|---|---|
+| `A` | Airport **arrival** — pick the passenger up | `Airline/Flight:` + `Time/City:` |
+| `D` | Airport **departure** — drop the passenger off | `Airline/Flight:` + `Time/City:` |
+| `GBA` / `GBD` | Same arrival/departure split, different group | as above |
+| `S` | Shuttle between sites | `Route:` |
+| `MED` | Medical appointment | `Appointment time:` + `Duration:` |
+| `TD` | Train | `Number:` (not `Airline/Flight:`) |
+| `HO` | Embassy/consulate appointment | `Arrival time:` (not `Appointment time:`) |
+
+**The `A`/`D` split matters more than its size suggests** — see Phase 1. `TD`
+and `HO` together are ~1% and are an explicit Phase 1 exclusion; note that a
+classifier keyed only on the three well-known field labels silently buckets them
+as passenger-less shifts, so the "no passengers" share below is slightly
+overstated.
 
 ### Airport row
 ```
@@ -94,7 +123,45 @@ not trips. Do not parse them as stops.
 
 ---
 
-## Phase 0 — parser spike (do this first)
+## Phase 0 — parser spike (DONE, 2026-09-16)
+
+**100% clean parse of all 249 real assignment PDFs**, past the 95% bar. Two
+parser bugs found and fixed: an empty street address after a stop's `|`
+separator (dispatch/standby stops carry no address), and stop labels that aren't
+clean 2–5 letter codes ("Dispatch", "Orange Shuttle").
+
+Answers to the five questions:
+
+1. **Format holds** — 100%, no messy tail.
+2. **Both templates are identical.** `TransportationAssignmentReport.pdf` and
+   `Assignment Details.pdf` extract to the same structure; both open with the
+   literal header "Assignment Details". The *same* assignment gets re-sent under
+   either filename interchangeably, so the filename tells you nothing.
+3. **Date inference works, at ~99%.** A greedy "clock went backwards → next day"
+   rule got 18/18 genuine multi-day assignments right, checked against each
+   document's own stated end date — but produced 2 false positives across 231
+   same-day assignments, because extracted stop order isn't always strictly
+   chronological (multi-leg routes interleave; a return-trip pickup can appear
+   before an earlier drop-off). Good enough to use, not good enough to trust
+   silently: validate against the stated end date and flag disagreements.
+4. **Updates replace the whole record.** There is no diff marker — the
+   "Updated Passenger" tag the export notes mentioned **does not exist** in the
+   data (only 4/249 PDFs contain "updated" at all, as free text in driver
+   notes). Between versions, assignment end time, individual stop ETA/ETD, and a
+   passenger's own flight arrival time all shift (one real case: a Southwest
+   arrival moved 5:12pm → 5:20pm, a genuine delay correction), and the stop list
+   itself grows and shrinks (one chain ran 5 → 7 → 6 → 6 stops as a leg was added
+   then partly reverted). So reconciliation is **whole-record replace,
+   latest-wins**, ordered by the page-footer print timestamp. The manifest's
+   `email_no` is **not** chronological.
+5. **Flight numbers need an airline table, not a padding rule.** Zero-padding is
+   real (`DL0053` → `DL53`) but only ~30% of flight lines carry a carrier prefix
+   at all. The other ~70% are bare digits qualified by a free-text airline name
+   ("United Airlines 1856"), across 31 distinct airline strings including many
+   international carriers (Aero Mexico, Turkish, EVA, Korean Air, Cathay
+   Pacific). A hand-rolled dict of US majors will not cover it.
+
+### Original scope of the spike, for reference
 
 A standalone script that reads the PDFs and emits JSON. **No app changes, no
 production risk, no model decisions.** It exists to answer the questions that
@@ -133,6 +200,37 @@ AeroDataBox status, so rendering needs an honest branch rather than a null-shape
 hole.
 
 This is the phase that takes coverage from 38% of assignments to 100%.
+
+### Three additions Phase 0 forced
+
+**1. `flight` needs a direction, not one formula.** An `A` arrival and a `D`
+departure are opposite problems:
+
+```
+arrival  (A):  leaveBy = arrivalTime   − drive − buffer
+departure (D): leaveBy = departureTime − checkInLead − drive − buffer
+```
+
+They also read different legs of the same AeroDataBox record — today everything
+keys off `status.arrival`, and a departure job must key off `status.departure`.
+And the delay semantics invert: a delayed arrival means leave *later*, a delayed
+departure also means leave later, but an arrival that moves *earlier* is the
+urgent case while a departure moving earlier is the dangerous one. `checkInLead`
+is a new setting and does not exist yet.
+
+**2. Dedupe on the in-PDF assignment number.** See the callout above.
+
+**3. Name the exclusions.** `TD` (train) and `HO` (embassy/consulate) are real,
+about 1% combined, and deliberately out of scope for Phase 1 — but they must be
+an explicit exclusion the importer reports, not a silent miscount into "shift".
+
+### And one sub-task that is bigger than it looks
+
+Resolving "United Airlines 1856" to `UA1856` needs a real airline-name → IATA
+reference, covering international carriers. Options, cheapest first: check
+whether AeroDataBox exposes an airline lookup we already pay for; otherwise ship
+a vendored IATA table. Do not hand-roll a dict of US majors — 31 distinct
+airline strings appear in a 249-document sample, and that is a lower bound.
 
 ## Phase 2 — import
 
