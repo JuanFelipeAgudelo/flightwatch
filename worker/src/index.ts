@@ -137,6 +137,15 @@ async function removeFromAllTrackedIfOrphaned(
 // stopped cron from polling a flight that landed weeks ago.
 const LANDED_POLL_GRACE_MS = 2 * 60 * 60 * 1000; // 2 hours past arrival
 
+// How long to wait after a poll that produced nothing usable. The offset ladder
+// in computeNextPollAt only governs the SUCCESS path, so these two are what stop
+// a flight that never resolves from costing a unit forever.
+//   transient  we have a status already, so this was a blip — try again soon
+//   unresolvable  we have never had a status: the quota is gone or the number is
+//                 wrong, and neither fixes itself within the half hour
+const TRANSIENT_RETRY_MS = 30 * 60 * 1000;
+const UNRESOLVABLE_RETRY_MS = 6 * 60 * 60 * 1000;
+
 function isLanded(status: FlightStatus): boolean {
   return /landed|arrived/i.test(status.status);
 }
@@ -147,6 +156,9 @@ async function stopPollingIfLongLanded(env: Env, flight: FlightRef, status: Flig
   if (!arrivalUtc) return;
   if (Date.now() - new Date(arrivalUtc).getTime() > LANDED_POLL_GRACE_MS) {
     await removeFromAllTracked(env, flight);
+    // Out of the poll set, so nothing reads this again — without the delete it
+    // would sit in KV for the life of the namespace.
+    await env.FLIGHT_DATA.delete(scheduleKey(flight));
   }
 }
 
@@ -448,15 +460,20 @@ export default {
     // instead of paying each flight's KV + AeroDataBox round-trip in sequence.
     await Promise.all(
       due.map(async (flight) => {
+        // Declared outside the try because the catch needs it: whether we have
+        // ever held a status for this flight is what separates a blip from a
+        // flight that is never going to resolve.
+        let hadPriorStatus = false;
         try {
           const key = flightKey(flight);
           const prevRaw = await env.FLIGHT_DATA.get(key);
+          hadPriorStatus = prevRaw !== null;
           const prev: FlightStatus | null = prevRaw ? JSON.parse(prevRaw) : null;
 
           const next = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
           if (!next) {
             // Unknown to AeroDataBox — back off rather than retrying every tick.
-            await setSchedule(env, flight, new Date(now + 6 * 3600 * 1000).toISOString());
+            await setSchedule(env, flight, new Date(now + UNRESOLVABLE_RETRY_MS).toISOString());
             return;
           }
 
@@ -497,8 +514,12 @@ export default {
         } catch (err) {
           console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
           // A failed poll must not leave the flight due forever, re-spending a
-          // unit every tick on something that is erroring.
-          await setSchedule(env, flight, new Date(now + 30 * 60 * 1000).toISOString());
+          // unit every tick on something that is erroring. A flight we have never
+          // had a status for is not a blip — an exhausted quota answers 429 to
+          // every flight, every time — so it backs off as hard as one the API has
+          // never heard of instead of retrying twice an hour indefinitely.
+          const retryMs = hadPriorStatus ? TRANSIENT_RETRY_MS : UNRESOLVABLE_RETRY_MS;
+          await setSchedule(env, flight, new Date(now + retryMs).toISOString());
         }
       })
     );
