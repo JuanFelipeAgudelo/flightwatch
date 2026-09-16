@@ -5,8 +5,9 @@ Status: **Phase 0 complete (2026-09-16). Phase 1 cleared to start.**
 The spike parsed all 249 real assignment PDFs cleanly and corrected several
 claims that were wrong in the first draft of this document. Corrections are
 folded in below rather than appended, so what you are reading is current.
-Spike script: `spike/parser.py` (uncommitted — its input PDFs and JSON output
-carry passenger PII and are gitignored).
+Spike script: `spike/parser.py`. The script is committed; its input PDFs and
+JSON output carry passenger PII and are gitignored, so the spike has to be
+re-fed real assignments to reproduce these numbers.
 
 ## Why
 
