@@ -13,6 +13,7 @@ import {
   ListSettings,
   FlightRef,
   RECENT_CHANGE_WINDOW_MS,
+  computeNextPollAt,
   flightKey,
   historyKey,
   isFlightJob,
@@ -143,6 +144,24 @@ async function stopPollingIfLongLanded(env: Env, flight: FlightRef, status: Flig
   if (Date.now() - new Date(arrivalUtc).getTime() > LANDED_POLL_GRACE_MS) {
     await removeFromAllTracked(env, flight);
   }
+}
+
+// Re-reads the poll set and writes every flight's new schedule in one go. Doing
+// it once at the end rather than per-flight means a tick that polls several
+// flights can't have each write clobber the last.
+async function applySchedules(env: Env, byKey: Map<string, string | null>): Promise<void> {
+  if (!byKey.size) return;
+  const all = await getAllTracked(env);
+  let touched = false;
+  for (const flight of all) {
+    const next = byKey.get(flightKey(flight));
+    if (next === undefined) continue; // not polled this tick
+    if (flight.nextPollAt !== next) {
+      flight.nextPollAt = next;
+      touched = true;
+    }
+  }
+  if (touched) await saveAllTracked(env, all);
 }
 
 async function getHistory(env: Env, flight: FlightRef): Promise<HistoryEntry[]> {
@@ -301,6 +320,14 @@ export default {
         if (status) {
           await env.FLIGHT_DATA.put(flightKey(ref), JSON.stringify(status));
         }
+        // The add already paid a unit, so bank it: without a schedule this
+        // flight reads as "due" and the next cron tick would spend another.
+        if (status) {
+          await applySchedules(
+            env,
+            new Map([[flightKey(ref), computeNextPollAt(status, Date.now(), false)]])
+          );
+        }
       } catch (err) {
         console.error(`Immediate status fetch failed for ${flight.flightNumber} (${flight.date}):`, err);
       }
@@ -403,21 +430,45 @@ export default {
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
     const tracked = await getAllTracked(env);
+    const now = Date.now();
+
+    // Cron still wakes every 20 minutes — that part is free — but it now asks
+    // which flights are actually DUE rather than polling all of them. The
+    // assignment email already supplies a usable scheduled time, so a unit is
+    // only worth spending when the answer could still change what the driver does.
+    // An absent nextPollAt means due: never skip a flight because a schedule
+    // failed to compute.
+    const due = tracked.filter(
+      (f) => !f.nextPollAt || new Date(f.nextPollAt).getTime() <= now
+    );
+    if (!due.length) return;
+
+    // Each flight's next poll time, applied in one write at the end so a burst
+    // of concurrent polls can't lose each other's updates.
+    const rescheduled = new Map<string, string | null>();
 
     // Independent per-flight, so poll and notify for all of them concurrently
     // instead of paying each flight's KV + AeroDataBox round-trip in sequence.
     await Promise.all(
-      tracked.map(async (flight) => {
+      due.map(async (flight) => {
         try {
           const key = flightKey(flight);
           const prevRaw = await env.FLIGHT_DATA.get(key);
           const prev: FlightStatus | null = prevRaw ? JSON.parse(prevRaw) : null;
 
           const next = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
-          if (!next) return;
+          if (!next) {
+            // Unknown to AeroDataBox — back off rather than retrying every tick.
+            rescheduled.set(key, new Date(now + 6 * 3600 * 1000).toISOString());
+            return;
+          }
 
           const changes = diffFlightStatus(prev, next);
           await env.FLIGHT_DATA.put(key, JSON.stringify(next));
+
+          // A flight that just moved is likely to move again, so tighten the
+          // cadence. That is where the units genuinely buy something.
+          rescheduled.set(key, computeNextPollAt(next, now, changes.length > 0));
 
           if (changes.length > 0) {
             await appendHistory(env, flight, changes);
@@ -448,8 +499,13 @@ export default {
           await stopPollingIfLongLanded(env, flight, next);
         } catch (err) {
           console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
+          // A failed poll must not leave the flight due forever, re-spending a
+          // unit every tick on something that is erroring.
+          rescheduled.set(flightKey(flight), new Date(now + 30 * 60 * 1000).toISOString());
         }
       })
     );
+
+    await applySchedules(env, rescheduled);
   },
 };

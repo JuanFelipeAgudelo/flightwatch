@@ -51,6 +51,76 @@ export function kindOf(job: Job): JobKind {
 export interface FlightRef {
   flightNumber: string;
   date: string;
+  // When cron should next spend an AeroDataBox unit on this flight. Absent means
+  // "due now" — a flight that somehow missed a schedule computation must cost a
+  // unit, never go silently unpolled.
+  nextPollAt?: string | null; // ISO instant
+}
+
+// How long before the next leg event a poll is worth spending a unit on. The
+// assignment email already gives a usable scheduled time, so a poll only earns
+// its keep when the answer could still change what the driver does:
+//   6h  replan the day
+//   3h  inbound aircraft is positioning; delays become real
+//   2h  the decision window — last point that changes whether you leave
+//  45m  gate, terminal and belt firm up while you're driving
+//  15m  final position before you're standing in the hall
+const POLL_OFFSETS_MS = [6, 3, 2, 0.75, 0.25].map((h) => h * 3600 * 1000);
+
+// One more poll after the event, which is the only time a baggage belt is
+// knowable. Arrivals need it; nothing else does.
+const POST_EVENT_POLL_MS = 15 * 60 * 1000;
+
+/** The next leg event worth anchoring a schedule to: the departure while the
+ *  flight is still on the ground, the arrival once it is airborne. Kind-free on
+ *  purpose — one flight can be someone's departure and someone else's arrival. */
+export function nextLegInstant(status: FlightStatus, now: number): number | null {
+  const times = [
+    status.departure.estimatedTimeUtc || status.departure.scheduledTimeUtc,
+    status.arrival.estimatedTimeUtc || status.arrival.scheduledTimeUtc,
+  ]
+    .filter(Boolean)
+    .map((t) => new Date(t as string).getTime())
+    .filter((t) => !Number.isNaN(t));
+  if (!times.length) return null;
+  const upcoming = times.filter((t) => t > now);
+  return upcoming.length ? Math.min(...upcoming) : Math.max(...times);
+}
+
+/**
+ * When to next poll this flight. `unsettled` tightens the cadence because a
+ * flight that just moved is likely to move again — that is where the units
+ * genuinely buy something.
+ */
+export function computeNextPollAt(
+  status: FlightStatus,
+  now: number,
+  unsettled: boolean
+): string | null {
+  const event = nextLegInstant(status, now);
+  if (event === null) return new Date(now + 60 * 60 * 1000).toISOString();
+
+  const until = event - now;
+
+  // Past the event: one belt-confirmation poll, then stop scheduling. The
+  // existing landed-grace logic removes it from the poll set entirely.
+  if (until <= 0) {
+    return -until < POST_EVENT_POLL_MS
+      ? new Date(event + POST_EVENT_POLL_MS).toISOString()
+      : null;
+  }
+
+  if (unsettled) {
+    // Don't let escalation push a poll past the next scheduled one.
+    const soon = Math.min(now + 30 * 60 * 1000, event);
+    return new Date(soon).toISOString();
+  }
+
+  // Sleep until the next offset that is still ahead of us. Beyond the widest
+  // offset that means a long sleep, which is the whole point: a flight a day
+  // out tells us nothing we can act on, and dispatch re-sends if it moves.
+  const next = POLL_OFFSETS_MS.find((offset) => offset < until);
+  return new Date(next === undefined ? event : event - next).toISOString();
 }
 
 // A type guard rather than a boolean, so a call site that checks it can then use
