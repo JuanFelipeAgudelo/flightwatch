@@ -1,4 +1,4 @@
-import type { FlightStatus, TrackedFlight } from "./types";
+import type { FlightRef, FlightStatus } from "./types";
 
 const API_HOST = "aerodatabox.p.rapidapi.com";
 
@@ -41,7 +41,7 @@ interface AeroDataBoxFlight {
 
 export async function fetchFlightStatus(
   apiKey: string,
-  flight: TrackedFlight
+  flight: FlightRef
 ): Promise<FlightStatus | null> {
   const url = `https://${API_HOST}/flights/number/${encodeURIComponent(
     flight.flightNumber
