@@ -18,6 +18,7 @@ import {
   computeNextPollAt,
   flightKey,
   historyKey,
+  scheduleKey,
   isFlightJob,
   jobId,
   kindOf,
@@ -127,6 +128,7 @@ async function removeFromAllTrackedIfOrphaned(
   await removeFromAllTracked(env, flight);
   await env.FLIGHT_DATA.delete(flightKey(flight));
   await env.FLIGHT_DATA.delete(historyKey(flight));
+  await env.FLIGHT_DATA.delete(scheduleKey(flight));
 }
 
 // A landed/arrived flight's status won't change again, so keep polling for a
@@ -148,22 +150,14 @@ async function stopPollingIfLongLanded(env: Env, flight: FlightRef, status: Flig
   }
 }
 
-// Re-reads the poll set and writes every flight's new schedule in one go. Doing
-// it once at the end rather than per-flight means a tick that polls several
-// flights can't have each write clobber the last.
-async function applySchedules(env: Env, byKey: Map<string, string>): Promise<void> {
-  if (!byKey.size) return;
-  const all = await getAllTracked(env);
-  let touched = false;
-  for (const flight of all) {
-    const next = byKey.get(flightKey(flight));
-    if (next === undefined) continue; // not polled this tick
-    if (flight.nextPollAt !== next) {
-      flight.nextPollAt = next;
-      touched = true;
-    }
-  }
-  if (touched) await saveAllTracked(env, all);
+// Each flight's schedule lives under its own key, so writing one never touches
+// another and cron never rewrites the shared poll set.
+async function getSchedule(env: Env, flight: FlightRef): Promise<string | null> {
+  return env.FLIGHT_DATA.get(scheduleKey(flight));
+}
+
+async function setSchedule(env: Env, flight: FlightRef, at: string): Promise<void> {
+  await env.FLIGHT_DATA.put(scheduleKey(flight), at);
 }
 
 async function getHistory(env: Env, flight: FlightRef): Promise<HistoryEntry[]> {
@@ -325,10 +319,7 @@ export default {
         // The add already paid a unit, so bank it: without a schedule this
         // flight reads as "due" and the next cron tick would spend another.
         if (status) {
-          await applySchedules(
-            env,
-            new Map([[flightKey(ref), computeNextPollAt(status, Date.now(), false)]])
-          );
+          await setSchedule(env, ref, computeNextPollAt(status, Date.now(), false));
         }
       } catch (err) {
         console.error(`Immediate status fetch failed for ${flight.flightNumber} (${flight.date}):`, err);
@@ -439,23 +430,19 @@ export default {
     // which flights are actually DUE rather than polling all of them. The
     // assignment email already supplies a usable scheduled time, so a unit is
     // only worth spending when the answer could still change what the driver does.
-    // An absent nextPollAt means due: never skip a flight because a schedule
+    // An absent schedule means due: never skip a flight because a schedule
     // failed to compute.
-    // An ABSENT nextPollAt means due — never skip a flight whose schedule
-    // failed to compute. But computeNextPollAt returns null to mean "done, stop
-    // scheduling", and null is also falsy, so the two must not be conflated:
-    // treating "done" as "due" polls every landed flight on every tick until
-    // the landed-grace sweep removes it, which is exactly the waste this whole
-    // mechanism exists to avoid. DONE_POLLING is the explicit sentinel.
-    const due = tracked.filter((f) => {
-      if (f.nextPollAt === DONE_POLLING) return false;
-      return !f.nextPollAt || new Date(f.nextPollAt).getTime() <= now;
+    // An ABSENT schedule means due — never skip a flight whose schedule failed
+    // to compute. DONE_POLLING is a separate, explicit sentinel: it is also
+    // falsy-adjacent in spirit, so conflating the two would poll every landed
+    // flight on every tick, which is the waste this mechanism exists to avoid.
+    const schedules = await Promise.all(tracked.map((f) => getSchedule(env, f)));
+    const due = tracked.filter((_, i) => {
+      const at = schedules[i];
+      if (at === DONE_POLLING) return false;
+      return !at || new Date(at).getTime() <= now;
     });
     if (!due.length) return;
-
-    // Each flight's next poll time, applied in one write at the end so a burst
-    // of concurrent polls can't lose each other's updates.
-    const rescheduled = new Map<string, string>();
 
     // Independent per-flight, so poll and notify for all of them concurrently
     // instead of paying each flight's KV + AeroDataBox round-trip in sequence.
@@ -469,7 +456,7 @@ export default {
           const next = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
           if (!next) {
             // Unknown to AeroDataBox — back off rather than retrying every tick.
-            rescheduled.set(key, new Date(now + 6 * 3600 * 1000).toISOString());
+            await setSchedule(env, flight, new Date(now + 6 * 3600 * 1000).toISOString());
             return;
           }
 
@@ -478,7 +465,7 @@ export default {
 
           // A flight that just moved is likely to move again, so tighten the
           // cadence. That is where the units genuinely buy something.
-          rescheduled.set(key, computeNextPollAt(next, now, changes.length > 0));
+          await setSchedule(env, flight, computeNextPollAt(next, now, changes.length > 0));
 
           if (changes.length > 0) {
             await appendHistory(env, flight, changes);
@@ -511,11 +498,10 @@ export default {
           console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
           // A failed poll must not leave the flight due forever, re-spending a
           // unit every tick on something that is erroring.
-          rescheduled.set(flightKey(flight), new Date(now + 30 * 60 * 1000).toISOString());
+          await setSchedule(env, flight, new Date(now + 30 * 60 * 1000).toISOString());
         }
       })
     );
 
-    await applySchedules(env, rescheduled);
   },
 };

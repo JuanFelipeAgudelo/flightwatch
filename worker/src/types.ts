@@ -51,10 +51,6 @@ export function kindOf(job: Job): JobKind {
 export interface FlightRef {
   flightNumber: string;
   date: string;
-  // When cron should next spend an AeroDataBox unit on this flight. Absent means
-  // "due now" — a flight that somehow missed a schedule computation must cost a
-  // unit, never go silently unpolled.
-  nextPollAt?: string | null; // ISO instant
 }
 
 // How long before the next leg event a poll is worth spending a unit on. The
@@ -72,7 +68,7 @@ const POLL_OFFSETS_MS = [6, 3, 2, 0.75, 0.25].map((h) => h * 3600 * 1000);
 const POST_EVENT_POLL_MS = 15 * 60 * 1000;
 
 /** Explicit "nothing more to learn about this flight" marker. Distinct from an
- *  absent nextPollAt, which means due — conflating them polls every landed
+ *  absent schedule, which means due — conflating them polls every landed
  *  flight on every tick. */
 export const DONE_POLLING = "done";
 
@@ -239,6 +235,16 @@ export function trackersKey(flight: FlightRef): string {
 // the flight detail screen can show what moved and when.
 export function historyKey(flight: FlightRef): string {
   return `${flightKey(flight)}:history`;
+}
+
+/** When cron should next spend a unit on this flight. Deliberately its OWN key
+ *  rather than a field on the shared poll set: cron would otherwise rewrite that
+ *  whole array on every tick, and with no compare-and-swap in KV a concurrent
+ *  add would be silently dropped from polling. Cron now only READS the poll set.
+ *  An absent value means due — a flight whose schedule failed to compute must
+ *  cost a unit, never go unpolled. */
+export function scheduleKey(flight: FlightRef): string {
+  return `${flightKey(flight)}:sched`;
 }
 
 export interface HistoryEntry {
