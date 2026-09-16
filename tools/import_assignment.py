@@ -44,6 +44,13 @@ from airlines import lookup as airline_lookup  # noqa: E402
 
 API = "https://flightwatch-worker.juanfe02agu.workers.dev"
 
+# The driver's home site. Drive times are only meaningful relative to one origin.
+BASE = "WRK"  # Warwick, 1 Kings Drive
+
+# Every airport this department drives to. Listed so --drive-times can say which
+# ones it has NO evidence for, rather than leaving a silent hole in the table.
+AIRPORTS = {"ALB", "BDL", "EWR", "HPN", "JFK", "LGA", "SWF"}
+
 DT_FMT = "%A, %B %d, %Y %I:%M %p"
 
 HEADER_RE = re.compile(
@@ -403,6 +410,8 @@ def main():
     ap.add_argument("paths", nargs="+")
     ap.add_argument("--post", metavar="LIST_CODE")
     ap.add_argument("--audit", action="store_true")
+    ap.add_argument("--drive-times", action="store_true",
+                    help="derive a driveMinutes table from scheduled stop gaps")
     ap.add_argument("--since", help="only assignments starting on/after YYYY-MM-DD")
     args = ap.parse_args()
 
@@ -426,6 +435,53 @@ def main():
     if args.since:
         cutoff = datetime.strptime(args.since, "%Y-%m-%d").date()
         docs = [d for d in docs if d["start"].date() >= cutoff]
+
+    if args.drive_times:
+        # The department keeps official "approved travel times" in HuB, which we
+        # don't have. But dispatch BUILDS every assignment from that table, so
+        # the gap between one stop's ETD and the next stop's ETA is that table
+        # expressed as real schedules. Medians, because a handful of gaps span
+        # an overnight or a wait rather than a drive.
+        import statistics
+        pairs = {}
+        for d in docs:
+            for a, b in zip(d["stops"], d["stops"][1:]):
+                if not a.get("etd") or not b.get("eta"):
+                    continue
+                mins = ((parse_tod(b["eta"]).hour * 60 + parse_tod(b["eta"]).minute)
+                        - (parse_tod(a["etd"]).hour * 60 + parse_tod(a["etd"]).minute))
+                if mins < 0:
+                    mins += 1440
+                if 0 < mins <= 300:
+                    pairs.setdefault((a["label"], b["label"]), []).append(mins)
+        print(f"{'from':<12}{'to':<12}{'n':>4}{'median':>8}{'min':>6}{'max':>6}")
+        for (f, t), v in sorted(pairs.items(), key=lambda kv: -len(kv[1])):
+            if len(v) < 2:
+                continue
+            print(f"{f:<12}{t:<12}{len(v):>4}{statistics.median(v):>8.0f}{min(v):>6.0f}{max(v):>6.0f}")
+        # The app keys driveMinutes by destination alone, which only means
+        # anything relative to a single origin -- the driver's base. So build
+        # the table from legs that start at BASE, falling back to the return
+        # leg when the outbound is thin. Pooling every leg arriving at a place
+        # would mix origins and be quietly wrong: Tuxedo is 10 minutes from
+        # Warwick and 40 from Newburgh, and the average of those is a number
+        # that is right for no journey anyone actually makes.
+        table = {}
+        for dest in {t for _, t in pairs} | {f for f, _ in pairs}:
+            if dest == BASE:
+                continue
+            out = pairs.get((BASE, dest), [])
+            back = pairs.get((dest, BASE), [])
+            legs = out if len(out) >= 2 else (out + back)
+            if legs:
+                table[dest] = round(statistics.median(legs))
+        print(f"\ndriveMinutes from {BASE} (legs out of base, falling back to the return leg):")
+        print(json.dumps(dict(sorted(table.items())), indent=2))
+        missing = sorted(AIRPORTS - set(table))
+        if missing:
+            print(f"\nNo data for: {', '.join(missing)} -- these never appear in the sample "
+                  f"and must come from the department's own table, not from a guess.")
+        return
 
     if args.audit:
         kinds, issues_all, with_jobs = {}, [], 0
