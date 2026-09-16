@@ -50,6 +50,15 @@ function icon(name, cls) {
   return `<svg class="ico ${cls || ""}" aria-hidden="true"><use href="#i-${name}" /></svg>`;
 }
 
+// Escapes each part, then joins with a raw separator entity. Keeping the escape
+// inside the helper is what stops the "&rarr; rendered literally" class of bug:
+// callers never hand-manage which fragments may be escaped.
+function joinParts(parts, separator) {
+  return parts.filter((p) => p !== null && p !== undefined && p !== "")
+    .map(esc)
+    .join(separator || " &middot; ");
+}
+
 function flightId(flight) {
   return `${flight.flightNumber}:${flight.date}`;
 }
@@ -86,6 +95,16 @@ function shortDate(isoDate) {
   return new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString("en-GB", {
     weekday: "short", day: "numeric", month: "short", timeZone: "UTC",
   });
+}
+
+// For real UTC instants (status.fetchedAt), as opposed to the airport wall-clock
+// strings everything else here handles. This one DOES convert to the reader's
+// timezone — "showing data from 14:10" is only useful against their own clock.
+function instantTime(iso) {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function tzAbbreviation(rawLocalTime, ianaZone) {
@@ -275,8 +294,11 @@ function renderHero(entry, hasChanged) {
   const sev = hasChanged ? "alert" : severity(status);
 
   if (!status) {
+    // Still carries data-flight: without it this flight can't be opened, and
+    // since delete lives on flight detail, it couldn't be removed either.
     return `
-      <section class="hero">
+      <section class="hero" data-flight="${esc(flight.flightNumber)}" data-date="${esc(flight.date)}"
+               role="button" tabindex="0">
         <div class="hero-top">
           <span class="eyebrow">NEXT PICKUP</span>
           ${chipFor(null)}
@@ -308,18 +330,26 @@ function renderHero(entry, hasChanged) {
     // here that would actively mislead someone about when to leave.
     countdown = `<div class="countdown">
         <span class="eyebrow">AS OF</span>
-        <span class="cd-value is-stale">${esc(shortTime(status.fetchedAt) || "&mdash;")}</span>
+        <span class="cd-value is-stale">${esc(instantTime(status.fetchedAt) || "&mdash;")}</span>
       </div>`;
   } else if (utc) {
+    // Label from the reported status, not from the clock: an overdue flight the
+    // API still calls EnRoute has not landed, and saying so next to an ON TIME
+    // chip is both contradictory and a claim we can't support.
     const diff = new Date(utc).getTime() - Date.now();
+    const landed = isLanded(status);
+    const label = landed ? "LANDED" : diff > 0 ? "LANDS IN" : "DUE";
+    const value = landed || diff > 0 ? formatDuration(diff) : "NOW";
     countdown = `<div class="countdown">
-        <span class="eyebrow">${diff > 0 ? "LANDS IN" : "LANDED"}</span>
-        <span class="cd-value" data-countdown="${esc(utc)}">${formatDuration(diff)}</span>
+        <span class="eyebrow">${label}</span>
+        <span class="cd-value"${diff > 0 ? ` data-countdown="${esc(utc)}"` : ""}>${value}</span>
       </div>`;
   }
 
-  const routePair = `${esc(dep.airportCode || dep.airport)} &rarr; ${esc(arrLeg.airportCode || arrLeg.airport)}`;
-  const route = [status.airline ? esc(status.airline) : "", routePair].filter(Boolean).join(" &middot; ");
+  const routePair = joinParts(
+    [dep.airportCode || dep.airport, arrLeg.airportCode || arrLeg.airport], " &rarr; "
+  );
+  const route = status.airline ? `${esc(status.airline)} &middot; ${routePair}` : routePair;
 
   const claim = "&mdash;"; // no claim source yet; an em-dash beats a guess
 
@@ -410,14 +440,12 @@ function renderHero(entry, hasChanged) {
 
 function rowMeta(entry) {
   const { flight, status } = entry;
-  const bits = [];
-  if (status) {
-    bits.push(`${esc(status.departure.airportCode || status.departure.airport)} &rarr; ${esc(status.arrival.airportCode || status.arrival.airport)}`);
-  } else {
-    bits.push(esc(shortDate(flight.date)));
-  }
-  if (flight.passenger && settings.showPassengerNames) bits.push(esc(flight.passenger));
-  return bits.join(" &middot; ");
+  const route = status
+    ? joinParts([status.departure.airportCode || status.departure.airport,
+                 status.arrival.airportCode || status.arrival.airport], " &rarr; ")
+    : esc(shortDate(flight.date));
+  const who = flight.passenger && settings.showPassengerNames ? esc(flight.passenger) : "";
+  return who ? `${route} &middot; ${who}` : route;
 }
 
 function renderBoardRow(entry) {
@@ -428,10 +456,17 @@ function renderBoardRow(entry) {
   const delay = status ? delayMinutes(status.arrival) : null;
   const utc = arrivalUtc(status);
 
+  // A flight whose arrival time has passed but which isn't reported landed yet
+  // must not show a countdown: formatDuration takes the absolute value, so it
+  // would read exactly like a flight still that far in the future.
+  const remaining = utc ? new Date(utc).getTime() - Date.now() : null;
+  const live = remaining !== null && remaining > 0 && sev !== "landed" && !(delay > 0);
+
   let delta = "";
   if (sev === "landed") delta = "LANDED";
   else if (delay !== null && delay > 0) delta = `+${delay}M`;
-  else if (utc) delta = formatDuration(new Date(utc).getTime() - Date.now());
+  else if (live) delta = formatDuration(remaining);
+  else if (remaining !== null) delta = "DUE";
 
   return `
     <button class="row${cls}" type="button" data-flight="${esc(flight.flightNumber)}" data-date="${esc(flight.date)}">
@@ -439,7 +474,7 @@ function renderBoardRow(entry) {
       <span class="code">${esc(flight.flightNumber)}</span>
       <span class="meta">${rowMeta(entry)}</span>
       <span class="time">${esc(t) || "&mdash;"}</span>
-      <span class="delta"${utc && sev !== "landed" && !(delay > 0) ? ` data-countdown="${esc(utc)}"` : ""}>${delta}</span>
+      <span class="delta"${live ? ` data-countdown="${esc(utc)}"` : ""}>${delta}</span>
     </button>`;
 }
 
@@ -450,7 +485,9 @@ function renderFlightCard(entry) {
   const t = shortTime(arrivalLocal(status));
   const who = flight.passenger && settings.showPassengerNames ? esc(flight.passenger) : "";
   const sub = status
-    ? `${esc(status.departure.airportCode || status.departure.airport)} &rarr; ${esc(status.arrival.airportCode || status.arrival.airport)}${status.arrival.terminal ? ` &middot; Terminal ${esc(status.arrival.terminal)}` : ""}`
+    ? joinParts([status.departure.airportCode || status.departure.airport,
+                 status.arrival.airportCode || status.arrival.airport], " &rarr; ") +
+      (status.arrival.terminal ? ` &middot; Terminal ${esc(status.arrival.terminal)}` : "")
     : esc(shortDate(flight.date));
 
   return `
@@ -529,7 +566,7 @@ function renderHome() {
     ? `<div class="warn-strip">
          ${icon("triangle-alert")}
          <span>No connection. Showing what was true at
-         <span class="mono">${esc(shortTime(lastFetchedIso) || "earlier")}</span>. Times may have moved.</span>
+         <span class="mono">${esc(instantTime(lastFetchedIso) || "earlier")}</span>. Times may have moved.</span>
        </div>`
     : "";
 
@@ -695,10 +732,28 @@ function renderDetail(entry, history) {
     <div class="hist">${histItems}</div>`;
 }
 
+// Keeps an open detail sheet in step with a background refresh — without this it
+// keeps rendering the entry object captured when it was opened.
+function refreshOpenDetail() {
+  if (!detailKey || document.getElementById("detail-sheet").hidden) return;
+  const [flightNumber, date] = splitDetailKey(detailKey);
+  const entry = entries.find((e) => e.flight.flightNumber === flightNumber && e.flight.date === date);
+  if (entry) renderDetail(entry, lastHistory);
+  else { detailKey = null; closeSheet("detail-sheet"); }
+}
+
+function splitDetailKey(key) {
+  const at = key.lastIndexOf(":");
+  return [key.slice(0, at), key.slice(at + 1)];
+}
+
+let lastHistory = null;
+
 async function openDetail(flightNumber, date) {
   const entry = entries.find((e) => e.flight.flightNumber === flightNumber && e.flight.date === date);
   if (!entry) return;
   detailKey = `${flightNumber}:${date}`;
+  lastHistory = null;
   renderDetail(entry, null);
   openSheet("detail-sheet");
 
@@ -708,7 +763,10 @@ async function openDetail(flightNumber, date) {
     if (!res.ok) return;
     const data = await res.json();
     // Only paint if the user hasn't navigated away while this was in flight.
-    if (detailKey === `${flightNumber}:${date}`) renderDetail(entry, data.history);
+    if (detailKey === `${flightNumber}:${date}`) {
+      lastHistory = data.history;
+      refreshOpenDetail();
+    }
   } catch (err) {
     console.error("Couldn't load history:", err);
   }
@@ -716,13 +774,20 @@ async function openDetail(flightNumber, date) {
 
 /* ================= COUNTDOWN ================= */
 
+// Milestones already reloaded for, so a flight that stays past its arrival time
+// doesn't re-trigger a fetch on every single tick forever.
+const reloadedFor = new Set();
+
 function tickCountdowns() {
   const now = Date.now();
   let crossed = false;
   document.querySelectorAll("[data-countdown]").forEach((el) => {
-    const target = new Date(el.dataset.countdown).getTime();
-    const diff = target - now;
-    if (diff <= 0 && el.classList.contains("cd-value")) { crossed = true; return; }
+    const key = el.dataset.countdown;
+    const diff = new Date(key).getTime() - now;
+    if (diff <= 0) {
+      if (!reloadedFor.has(key)) { reloadedFor.add(key); crossed = true; }
+      return;
+    }
     el.textContent = formatDuration(diff);
   });
   if (crossed) loadFlights();
@@ -767,6 +832,11 @@ async function loadFlights() {
   try {
     const res = await fetch(`${API_BASE}/api/flights?listCode=${encodeURIComponent(listCode)}`);
     if (!res.ok) {
+      // Clear offline first and re-render the chrome: the offline layout hides
+      // the settings button, and this message tells the driver to open it.
+      offline = false;
+      entries = [];
+      renderHome();
       main.innerHTML = `<div class="warn-strip">${icon("triangle-alert")}
         <span>That list code isn't recognised. Open Settings to switch to a different one.</span></div>`;
       return;
@@ -774,6 +844,7 @@ async function loadFlights() {
     offline = false;
     applyPayload(await res.json());
     renderHome();
+    refreshOpenDetail();
     syncSettingsSheet();
   } catch (err) {
     console.error(err);
@@ -821,23 +892,68 @@ function resolveTheme() {
   return h >= 6.5 && h < 19.5 ? "day" : "night"; // device-clock fallback
 }
 
-function applyTheme(mode) {
+let resolvedTheme = null;
+
+function setThemeMode(mode) {
   themeMode = mode;
   localStorage.setItem(LS_THEME, mode);
+  ["auto", "night", "day"].forEach((m) => {
+    document.getElementById(`theme-${m}`).setAttribute("aria-pressed", String(m === mode));
+  });
+  applyResolvedTheme();
+}
+
+// Called once a second from the clock tick, so it only touches the DOM when the
+// resolved theme actually flips — twice a day, not 86,400 times.
+function applyResolvedTheme() {
   const resolved = resolveTheme();
+  if (resolved === resolvedTheme) return;
+  resolvedTheme = resolved;
+
   if (resolved === "day") document.documentElement.setAttribute("data-theme", "day");
   else document.documentElement.removeAttribute("data-theme");
   document.querySelector('meta[name="theme-color"]')
     .setAttribute("content", resolved === "day" ? "#EFECE4" : "#0E1B30");
-  ["auto", "night", "day"].forEach((m) => {
-    document.getElementById(`theme-${m}`).setAttribute("aria-pressed", String(m === mode));
-  });
 }
 
 /* ================= SHEETS ================= */
 
-function openSheet(id) { document.getElementById(id).hidden = false; }
-function closeSheet(id) { document.getElementById(id).hidden = true; }
+// Which element opened each sheet, so focus can go back where it came from.
+const sheetOpener = new Map();
+
+function openSheet(id) {
+  const sheet = document.getElementById(id);
+  if (!sheet.hidden) return;
+  sheetOpener.set(id, document.activeElement);
+  sheet.hidden = false;
+  // Move focus into the sheet, otherwise it stays on the now-hidden trigger and
+  // tabbing walks the home screen behind the overlay.
+  const first = sheet.querySelector("button, input, textarea, [tabindex]");
+  if (first) first.focus();
+}
+
+function closeSheet(id) {
+  const sheet = document.getElementById(id);
+  if (sheet.hidden) return;
+  sheet.hidden = true;
+  // Detail state is cleared here rather than at each call site, so Escape and
+  // the back chevron can't leave detailKey pointing at a closed sheet.
+  if (id === "detail-sheet") { detailKey = null; lastHistory = null; }
+  const opener = sheetOpener.get(id);
+  sheetOpener.delete(id);
+  if (opener && document.contains(opener) && opener.focus) opener.focus();
+}
+
+function topmostOpenSheet() {
+  const open = Array.from(document.querySelectorAll(".sheet")).filter((s) => !s.hidden);
+  return open.length ? open[open.length - 1] : null;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const sheet = topmostOpenSheet();
+  if (sheet) { e.preventDefault(); closeSheet(sheet.id); }
+});
 
 async function copyText(text, btn) {
   try {
@@ -854,7 +970,12 @@ async function copyText(text, btn) {
 function syncSettingsSheet() {
   document.getElementById("set-code").textContent = listCode || "—";
   document.getElementById("set-topic").textContent = ntfyTopic || "—";
-  document.getElementById("buffer-input").value = settings.bufferMinutes;
+
+  // A background refresh must not yank a half-typed value out from under the
+  // driver, so skip rebuilding any field they're currently editing.
+  const editing = document.activeElement;
+  const editingSettings = editing && editing.closest && editing.closest("#settings-sheet");
+  if (!editingSettings) document.getElementById("buffer-input").value = settings.bufferMinutes;
 
   const airports = new Map();
   entries.forEach(({ status }) => {
@@ -865,15 +986,23 @@ function syncSettingsSheet() {
 
   const host = document.getElementById("drive-rows");
   document.getElementById("drive-empty").hidden = airports.size > 0;
-  host.innerHTML = Array.from(airports.entries()).map(([iata, name]) => `
+  if (editingSettings) return; // leave the DOM alone mid-edit
+
+  host.innerHTML = Array.from(airports.entries()).map(([iata, name]) => {
+    // A drive time of 0 is meaningful (pickup point is at the airport), so this
+    // checks for an actual number rather than truthiness.
+    const stored = settings.driveMinutes[iata];
+    const value = typeof stored === "number" ? String(stored) : "";
+    return `
     <div class="set-row">
       <span class="set-value" style="width:46px">${esc(iata)}</span>
-      <span class="lbl" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span>
+      <span class="lbl drive-name">${esc(name)}</span>
       <input class="num-input" type="number" min="0" max="300" step="5"
-             data-drive="${esc(iata)}" value="${Number(settings.driveMinutes[iata]) || ""}"
+             data-drive="${esc(iata)}" value="${esc(value)}"
              placeholder="--" aria-label="Drive time to ${esc(iata)} in minutes" />
       <span class="lbl">min</span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 
   host.querySelectorAll("[data-drive]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -898,7 +1027,7 @@ document.getElementById("settings-close").addEventListener("click", () => closeS
 document.getElementById("den-board").addEventListener("click", () => applyDensity("board"));
 document.getElementById("den-card").addEventListener("click", () => applyDensity("card"));
 ["auto", "night", "day"].forEach((m) => {
-  document.getElementById(`theme-${m}`).addEventListener("click", () => applyTheme(m));
+  document.getElementById(`theme-${m}`).addEventListener("click", () => setThemeMode(m));
 });
 
 document.getElementById("buffer-input").addEventListener("change", (e) => {
@@ -918,8 +1047,16 @@ document.getElementById("switch-code").addEventListener("click", async () => {
     if (!res.ok) { window.alert("That code isn't recognised — check it and try again."); return; }
     listCode = trimmed;
     localStorage.setItem(LS_LIST_CODE, listCode);
-    applyPayload(await res.json());
+    // Every piece of derived per-list state has to go, or the new list inherits
+    // the old one's. The acknowledged timestamp is the dangerous one: if it's
+    // newer than the new list's changes, its alerts are silently suppressed.
+    localStorage.removeItem(LS_ACKED);
     prevValues.clear();
+    reloadedFor.clear();
+    detailKey = null;
+    lastHistory = null;
+    closeSheet("detail-sheet");
+    applyPayload(await res.json());
     renderHome();
     syncSettingsSheet();
   } catch (err) {
@@ -1000,11 +1137,18 @@ document.getElementById("add-form").addEventListener("submit", async (e) => {
     listCode,
     flightNumber: form.flightNumber.value.trim().toUpperCase(),
     date: form.date.value,
-    passenger: form.passenger.value.trim() || null,
-    dropOff: form.dropOff.value.trim() || null,
-    pax: form.pax.value ? Number(form.pax.value) : null,
-    note: form.note.value.trim() || null,
   };
+  // Only send pickup fields the driver actually filled in. The Worker treats a
+  // present-but-null key as "clear this", so sending blanks here would wipe the
+  // details of a flight that is already tracked.
+  const passenger = form.passenger.value.trim();
+  const dropOff = form.dropOff.value.trim();
+  const note = form.note.value.trim();
+  if (passenger) payload.passenger = passenger;
+  if (dropOff) payload.dropOff = dropOff;
+  if (note) payload.note = note;
+  if (form.pax.value !== "") payload.pax = Number(form.pax.value);
+
   if (!payload.flightNumber || !payload.date) return;
 
   submit.disabled = true;
@@ -1036,7 +1180,7 @@ document.getElementById("add-form").addEventListener("submit", async (e) => {
 function tickClock() {
   document.getElementById("clock").textContent =
     new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
-  if (themeMode === "auto") applyTheme("auto");
+  if (themeMode === "auto") applyResolvedTheme();
 }
 
 /* ================= PULL TO REFRESH =================
@@ -1100,7 +1244,7 @@ function tickClock() {
 (async function init() {
   app.dataset.density = density;
   applyDensity(density);
-  applyTheme(themeMode);
+  setThemeMode(themeMode);
   tickClock();
 
   const ok = await ensureList();

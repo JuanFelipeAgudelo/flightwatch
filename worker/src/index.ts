@@ -35,6 +35,18 @@ function pickupFieldsFrom(body: Partial<TrackedFlight>): Partial<PickupFields> {
   return out;
 }
 
+// Drops keys whose value is null, for the paths where "not supplied" must not
+// mean "clear it".
+function definedOnly(fields: Partial<PickupFields>): Partial<PickupFields> {
+  const out: Partial<PickupFields> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== null && value !== undefined) {
+      (out as Record<string, unknown>)[key] = value;
+    }
+  }
+  return out;
+}
+
 function randomHex(bytes: number): string {
   const arr = new Uint8Array(bytes);
   crypto.getRandomValues(arr);
@@ -220,8 +232,10 @@ export default {
       };
       const existing = list.flights.find((f) => sameFlight(f, flight));
       if (existing) {
-        // Re-adding a flight with pickup details fills them in rather than duplicating.
-        Object.assign(existing, pickupFieldsFrom(body));
+        // Re-adding fills in details rather than duplicating — but only ones
+        // actually supplied. Clearing a field is PATCH's job; a re-add that
+        // happens to leave the optional inputs blank must not wipe what's there.
+        Object.assign(existing, definedOnly(pickupFieldsFrom(body)));
       } else {
         list.flights.push(flight);
       }

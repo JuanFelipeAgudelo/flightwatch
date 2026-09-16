@@ -105,6 +105,9 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      /* viewport-fit=cover + a translucent status bar hands an installed iOS PWA
+         the full screen, so the chrome would otherwise sit under the system clock. */
+      padding-top: env(safe-area-inset-top, 0px);
     }
 
     /* Inline page padding: 16px board / 20px card */
@@ -390,9 +393,13 @@
     .fcard.is-delayed .time { color: var(--alert-text); }
 
     /* ============ FOOTER CTA ============ */
-    .footer-cta { margin-top: auto; border-top: 1px solid var(--hairline); }
-    [data-density="board"] .footer-cta { padding: 14px var(--gutter) 44px; }
-    [data-density="card"]  .footer-cta { padding: 14px var(--gutter) 44px; }
+    /* 44px is the design's bottom safe area; add the device inset on top of it
+       so the CTA clears the iOS home indicator on a notched phone. */
+    .footer-cta {
+      margin-top: auto;
+      border-top: 1px solid var(--hairline);
+      padding: 14px var(--gutter) calc(44px + env(safe-area-inset-bottom, 0px));
+    }
     .cta {
       width: 100%; display: flex; align-items: center; justify-content: center; gap: 9px;
       background: transparent; border: 1px solid var(--brass-fill); color: var(--brass);
@@ -442,7 +449,8 @@
     .sheet[hidden] { display: none; }
     .sheet-head {
       display: flex; align-items: center; gap: 12px;
-      padding: 0 var(--gutter); height: 52px; flex: none;
+      padding: env(safe-area-inset-top, 0px) var(--gutter) 0;
+      height: calc(52px + env(safe-area-inset-top, 0px)); flex: none;
       border-bottom: 1px solid var(--hairline);
       position: sticky; top: 0; background: var(--page); z-index: 1;
     }
@@ -453,7 +461,11 @@
       font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
       color: var(--ink-2);
     }
-    .sheet-body { padding: 20px var(--gutter) 44px; display: flex; flex-direction: column; gap: 14px; }
+    .sheet-body {
+      padding: 20px var(--gutter) calc(44px + env(safe-area-inset-bottom, 0px));
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .drive-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .field { display: flex; flex-direction: column; gap: 7px; }
     .field > label {
@@ -619,7 +631,7 @@
       stroke-linecap: round; stroke-linejoin: round;
     }
 
-    .hist { padding: 4px var(--gutter) 44px; }
+    .hist { padding: 4px var(--gutter) calc(44px + env(safe-area-inset-bottom, 0px)); }
     .hist-item {
       display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--hairline);
     }
