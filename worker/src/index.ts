@@ -2,11 +2,17 @@ import { diffFlightStatus, fetchFlightStatus } from "./aerodatabox";
 import { sendNtfyNotification } from "./ntfy";
 import {
   ALL_TRACKED_KEY,
+  DEFAULT_SETTINGS,
   Env,
   FlightStatus,
+  HISTORY_LIMIT,
+  HistoryEntry,
   ListData,
+  ListSettings,
+  RECENT_CHANGE_WINDOW_MS,
   TrackedFlight,
   flightKey,
+  historyKey,
   listKey,
   ntfyTopicFor,
   trackersKey,
@@ -14,6 +20,31 @@ import {
 
 function sameFlight(a: TrackedFlight, b: TrackedFlight): boolean {
   return a.flightNumber === b.flightNumber && a.date === b.date;
+}
+
+type PickupFields = Pick<TrackedFlight, "passenger" | "pax" | "dropOff" | "note">;
+
+// Only copies keys the caller actually sent, so a PATCH that omits `note` leaves
+// the stored note alone instead of blanking it.
+function pickupFieldsFrom(body: Partial<TrackedFlight>): Partial<PickupFields> {
+  const out: Partial<PickupFields> = {};
+  if ("passenger" in body) out.passenger = body.passenger ?? null;
+  if ("pax" in body) out.pax = body.pax ?? null;
+  if ("dropOff" in body) out.dropOff = body.dropOff ?? null;
+  if ("note" in body) out.note = body.note ?? null;
+  return out;
+}
+
+// Drops keys whose value is null, for the paths where "not supplied" must not
+// mean "clear it".
+function definedOnly(fields: Partial<PickupFields>): Partial<PickupFields> {
+  const out: Partial<PickupFields> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== null && value !== undefined) {
+      (out as Record<string, unknown>)[key] = value;
+    }
+  }
+  return out;
 }
 
 function randomHex(bytes: number): string {
@@ -87,6 +118,7 @@ async function removeFromAllTrackedIfOrphaned(
   if (remainingTrackers.length > 0) return;
   await removeFromAllTracked(env, flight);
   await env.FLIGHT_DATA.delete(flightKey(flight));
+  await env.FLIGHT_DATA.delete(historyKey(flight));
 }
 
 // A landed/arrived flight's status won't change again, so keep polling for a
@@ -108,10 +140,20 @@ async function stopPollingIfLongLanded(env: Env, flight: TrackedFlight, status: 
   }
 }
 
+async function getHistory(env: Env, flight: TrackedFlight): Promise<HistoryEntry[]> {
+  return getJSON<HistoryEntry[]>(env, historyKey(flight), []);
+}
+
+async function appendHistory(env: Env, flight: TrackedFlight, changes: string[]): Promise<void> {
+  const history = await getHistory(env, flight);
+  history.unshift({ at: new Date().toISOString(), changes });
+  await putJSON(env, historyKey(flight), history.slice(0, HISTORY_LIMIT));
+}
+
 function corsHeaders(): HeadersInit {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };
 }
@@ -149,13 +191,28 @@ export default {
       const list = await getList(env, listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
+      // Recent changes come from the stored history rather than a client-side
+      // diff, so a driver who closed the app still sees what moved while it
+      // was shut.
+      const since = Date.now() - RECENT_CHANGE_WINDOW_MS;
       const entries = await Promise.all(
         list.flights.map(async (f) => {
-          const raw = await env.FLIGHT_DATA.get(flightKey(f));
-          return { flight: f, status: raw ? (JSON.parse(raw) as FlightStatus) : null };
+          const [raw, history] = await Promise.all([
+            env.FLIGHT_DATA.get(flightKey(f)),
+            getHistory(env, f),
+          ]);
+          return {
+            flight: f,
+            status: raw ? (JSON.parse(raw) as FlightStatus) : null,
+            recentChanges: history.filter((h) => new Date(h.at).getTime() >= since),
+          };
         })
       );
-      return json({ ntfyTopic: ntfyTopicFor(listCode), entries });
+      return json({
+        ntfyTopic: ntfyTopicFor(listCode),
+        settings: { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) },
+        entries,
+      });
     }
 
     // POST /api/flights — add a flight to a list: { listCode, flightNumber, date }
@@ -168,11 +225,21 @@ export default {
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const flight: TrackedFlight = { flightNumber: body.flightNumber, date: body.date };
-      if (!list.flights.some((f) => sameFlight(f, flight))) {
+      const flight: TrackedFlight = {
+        flightNumber: body.flightNumber,
+        date: body.date,
+        ...pickupFieldsFrom(body),
+      };
+      const existing = list.flights.find((f) => sameFlight(f, flight));
+      if (existing) {
+        // Re-adding fills in details rather than duplicating — but only ones
+        // actually supplied. Clearing a field is PATCH's job; a re-add that
+        // happens to leave the optional inputs blank must not wipe what's there.
+        Object.assign(existing, definedOnly(pickupFieldsFrom(body)));
+      } else {
         list.flights.push(flight);
-        await saveList(env, body.listCode, list);
       }
+      await saveList(env, body.listCode, list);
 
       await addToAllTracked(env, flight);
       const trackers = await getTrackers(env, flight);
@@ -196,6 +263,66 @@ export default {
       }
 
       return json({ flight, status });
+    }
+
+    // GET /api/history?listCode=&flightNumber=&date= — what has moved on this flight
+    if (request.method === "GET" && url.pathname === "/api/history") {
+      const listCode = url.searchParams.get("listCode");
+      const flightNumber = url.searchParams.get("flightNumber");
+      const date = url.searchParams.get("date");
+      if (!listCode || !flightNumber || !date) {
+        return json({ error: "listCode, flightNumber and date are required" }, 400);
+      }
+
+      // Only serve history for a flight the caller's own list is tracking.
+      const list = await getList(env, listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+      const flight: TrackedFlight = { flightNumber, date };
+      if (!list.flights.some((f) => sameFlight(f, flight))) {
+        return json({ error: "Flight is not on this list" }, 404);
+      }
+
+      return json({ history: await getHistory(env, flight) });
+    }
+
+    // PATCH /api/flights — edit pickup details without re-adding the flight
+    if (request.method === "PATCH" && url.pathname === "/api/flights") {
+      const body = (await request.json()) as TrackedFlight & { listCode?: string };
+      if (!body.listCode || !body.flightNumber || !body.date) {
+        return json({ error: "listCode, flightNumber and date are required" }, 400);
+      }
+
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const entry = list.flights.find((f) =>
+        sameFlight(f, { flightNumber: body.flightNumber, date: body.date })
+      );
+      if (!entry) return json({ error: "Flight is not on this list" }, 404);
+
+      Object.assign(entry, pickupFieldsFrom(body));
+      await saveList(env, body.listCode, list);
+      return json({ flight: entry });
+    }
+
+    // PUT /api/settings — write this list's drive times, buffer and display prefs
+    if (request.method === "PUT" && url.pathname === "/api/settings") {
+      const body = (await request.json()) as Partial<ListSettings> & { listCode?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const current = { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) };
+      const settings: ListSettings = {
+        driveMinutes: body.driveMinutes ?? current.driveMinutes,
+        bufferMinutes: body.bufferMinutes ?? current.bufferMinutes,
+        showPassengerNames: body.showPassengerNames ?? current.showPassengerNames,
+      };
+
+      list.settings = settings;
+      await saveList(env, body.listCode, list);
+      return json({ settings });
     }
 
     // DELETE /api/flights — stop tracking: { listCode, flightNumber, date }
@@ -241,15 +368,28 @@ export default {
           await env.FLIGHT_DATA.put(key, JSON.stringify(next));
 
           if (changes.length > 0) {
+            await appendHistory(env, flight, changes);
             const trackerCodes = await getTrackers(env, flight);
-            // Topics are derived from the list code directly, so no extra KV
-            // lookups are needed to resolve where to send this.
-            const topics = new Set(trackerCodes.map(ntfyTopicFor));
 
+            // Each list gets its own push, titled with that list's own passenger
+            // name when it has one — the name is what tells a driver whose job
+            // just moved. Topics derive from the list code, so no lookup is
+            // needed to address them; the list read is only to personalise, and
+            // only happens on an actual change.
             await Promise.all(
-              Array.from(topics).map((topic) =>
-                sendNtfyNotification(topic, `${flight.flightNumber} — ${next.status}`, changes.join("\n"))
-              )
+              trackerCodes.map(async (code) => {
+                let title = `${flight.flightNumber} — ${next.status}`;
+                try {
+                  const list = await getList(env, code);
+                  const entry = list && list.flights.find((f) => sameFlight(f, flight));
+                  if (entry && entry.passenger) {
+                    title = `${entry.passenger} · ${title}`;
+                  }
+                } catch (err) {
+                  console.error(`Couldn't personalise notification for ${code}:`, err);
+                }
+                return sendNtfyNotification(ntfyTopicFor(code), title, changes.join("\n"));
+              })
             );
           }
 
