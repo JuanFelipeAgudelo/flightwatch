@@ -3,30 +3,39 @@ import { sendNtfyNotification } from "./ntfy";
 import {
   ALL_TRACKED_KEY,
   DEFAULT_SETTINGS,
+  DONE_POLLING,
+  resolveSettings,
+  FLIGHT_KINDS,
   Env,
   FlightStatus,
   HISTORY_LIMIT,
   HistoryEntry,
   ListData,
+  Job,
   ListSettings,
+  FlightRef,
   RECENT_CHANGE_WINDOW_MS,
-  TrackedFlight,
+  computeNextPollAt,
   flightKey,
   historyKey,
+  scheduleKey,
+  isFlightJob,
+  jobId,
+  kindOf,
   listKey,
   ntfyTopicFor,
   trackersKey,
 } from "./types";
 
-function sameFlight(a: TrackedFlight, b: TrackedFlight): boolean {
+function sameFlight(a: FlightRef, b: FlightRef): boolean {
   return a.flightNumber === b.flightNumber && a.date === b.date;
 }
 
-type PickupFields = Pick<TrackedFlight, "passenger" | "pax" | "dropOff" | "note">;
+type PickupFields = Pick<Job, "passenger" | "pax" | "dropOff" | "note">;
 
 // Only copies keys the caller actually sent, so a PATCH that omits `note` leaves
 // the stored note alone instead of blanking it.
-function pickupFieldsFrom(body: Partial<TrackedFlight>): Partial<PickupFields> {
+function pickupFieldsFrom(body: Partial<Job>): Partial<PickupFields> {
   const out: Partial<PickupFields> = {};
   if ("passenger" in body) out.passenger = body.passenger ?? null;
   if ("pax" in body) out.pax = body.pax ?? null;
@@ -70,19 +79,19 @@ async function saveList(env: Env, code: string, data: ListData): Promise<void> {
   return putJSON(env, listKey(code), data);
 }
 
-async function getAllTracked(env: Env): Promise<TrackedFlight[]> {
-  return getJSON<TrackedFlight[]>(env, ALL_TRACKED_KEY, []);
+async function getAllTracked(env: Env): Promise<FlightRef[]> {
+  return getJSON<FlightRef[]>(env, ALL_TRACKED_KEY, []);
 }
 
-async function saveAllTracked(env: Env, flights: TrackedFlight[]): Promise<void> {
+async function saveAllTracked(env: Env, flights: FlightRef[]): Promise<void> {
   return putJSON(env, ALL_TRACKED_KEY, flights);
 }
 
-async function getTrackers(env: Env, flight: TrackedFlight): Promise<string[]> {
+async function getTrackers(env: Env, flight: FlightRef): Promise<string[]> {
   return getJSON<string[]>(env, trackersKey(flight), []);
 }
 
-async function saveTrackers(env: Env, flight: TrackedFlight, codes: string[]): Promise<void> {
+async function saveTrackers(env: Env, flight: FlightRef, codes: string[]): Promise<void> {
   const key = trackersKey(flight);
   if (codes.length === 0) {
     await env.FLIGHT_DATA.delete(key);
@@ -91,7 +100,7 @@ async function saveTrackers(env: Env, flight: TrackedFlight, codes: string[]): P
   }
 }
 
-async function addToAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
+async function addToAllTracked(env: Env, flight: FlightRef): Promise<void> {
   const all = await getAllTracked(env);
   if (!all.some((f) => sameFlight(f, flight))) {
     all.push(flight);
@@ -99,7 +108,7 @@ async function addToAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
   }
 }
 
-async function removeFromAllTracked(env: Env, flight: TrackedFlight): Promise<void> {
+async function removeFromAllTracked(env: Env, flight: FlightRef): Promise<void> {
   const all = await getAllTracked(env);
   const remaining = all.filter((f) => !sameFlight(f, flight));
   if (remaining.length !== all.length) {
@@ -112,13 +121,14 @@ async function removeFromAllTracked(env: Env, flight: TrackedFlight): Promise<vo
 // already-fetched remaining trackers list rather than re-reading the same KV key.
 async function removeFromAllTrackedIfOrphaned(
   env: Env,
-  flight: TrackedFlight,
+  flight: FlightRef,
   remainingTrackers: string[]
 ): Promise<void> {
   if (remainingTrackers.length > 0) return;
   await removeFromAllTracked(env, flight);
   await env.FLIGHT_DATA.delete(flightKey(flight));
   await env.FLIGHT_DATA.delete(historyKey(flight));
+  await env.FLIGHT_DATA.delete(scheduleKey(flight));
 }
 
 // A landed/arrived flight's status won't change again, so keep polling for a
@@ -131,7 +141,7 @@ function isLanded(status: FlightStatus): boolean {
   return /landed|arrived/i.test(status.status);
 }
 
-async function stopPollingIfLongLanded(env: Env, flight: TrackedFlight, status: FlightStatus): Promise<void> {
+async function stopPollingIfLongLanded(env: Env, flight: FlightRef, status: FlightStatus): Promise<void> {
   if (!isLanded(status)) return;
   const arrivalUtc = status.arrival.estimatedTimeUtc ?? status.arrival.scheduledTimeUtc;
   if (!arrivalUtc) return;
@@ -140,11 +150,21 @@ async function stopPollingIfLongLanded(env: Env, flight: TrackedFlight, status: 
   }
 }
 
-async function getHistory(env: Env, flight: TrackedFlight): Promise<HistoryEntry[]> {
+// Each flight's schedule lives under its own key, so writing one never touches
+// another and cron never rewrites the shared poll set.
+async function getSchedule(env: Env, flight: FlightRef): Promise<string | null> {
+  return env.FLIGHT_DATA.get(scheduleKey(flight));
+}
+
+async function setSchedule(env: Env, flight: FlightRef, at: string): Promise<void> {
+  await env.FLIGHT_DATA.put(scheduleKey(flight), at);
+}
+
+async function getHistory(env: Env, flight: FlightRef): Promise<HistoryEntry[]> {
   return getJSON<HistoryEntry[]>(env, historyKey(flight), []);
 }
 
-async function appendHistory(env: Env, flight: TrackedFlight, changes: string[]): Promise<void> {
+async function appendHistory(env: Env, flight: FlightRef, changes: string[]): Promise<void> {
   const history = await getHistory(env, flight);
   history.unshift({ at: new Date().toISOString(), changes });
   await putJSON(env, historyKey(flight), history.slice(0, HISTORY_LIMIT));
@@ -196,13 +216,18 @@ export default {
       // was shut.
       const since = Date.now() - RECENT_CHANGE_WINDOW_MS;
       const entries = await Promise.all(
-        list.flights.map(async (f) => {
+        list.flights.map(async (job) => {
+          // Only flight jobs have a live record to look up. Appointments and
+          // shifts carry their own fixed target time and never touch these keys.
+          if (!isFlightJob(job)) {
+            return { flight: job, status: null, recentChanges: [] };
+          }
           const [raw, history] = await Promise.all([
-            env.FLIGHT_DATA.get(flightKey(f)),
-            getHistory(env, f),
+            env.FLIGHT_DATA.get(flightKey(job)),
+            getHistory(env, job),
           ]);
           return {
-            flight: f,
+            flight: job,
             status: raw ? (JSON.parse(raw) as FlightStatus) : null,
             recentChanges: history.filter((h) => new Date(h.at).getTime() >= since),
           };
@@ -210,27 +235,60 @@ export default {
       );
       return json({
         ntfyTopic: ntfyTopicFor(listCode),
-        settings: { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) },
+        settings: resolveSettings(list.settings),
         entries,
       });
     }
 
-    // POST /api/flights — add a flight to a list: { listCode, flightNumber, date }
+    // POST /api/flights — add a job to a list. Flights need { flightNumber, date };
+    // appointments and shifts need { kind, targetTime } instead.
     if (request.method === "POST" && url.pathname === "/api/flights") {
-      const body = (await request.json()) as TrackedFlight & { listCode?: string };
-      if (!body.listCode || !body.flightNumber || !body.date) {
-        return json({ error: "listCode, flightNumber and date are required" }, 400);
+      const body = (await request.json()) as Job & { listCode?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+
+      const kind = kindOf(body);
+      if (!(FLIGHT_KINDS as string[]).concat("appointment", "shift").includes(kind)) {
+        return json({ error: `Unknown kind "${kind}"` }, 400);
+      }
+      const wantsFlight = (FLIGHT_KINDS as string[]).includes(kind);
+      if (wantsFlight && (!body.flightNumber || !body.date)) {
+        return json({ error: "flightNumber and date are required for a flight job" }, 400);
+      }
+      if (!wantsFlight && !body.targetTime) {
+        return json({ error: `targetTime is required for a ${kind} job` }, 400);
       }
 
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const flight: TrackedFlight = {
-        flightNumber: body.flightNumber,
-        date: body.date,
-        ...pickupFieldsFrom(body),
-      };
-      const existing = list.flights.find((f) => sameFlight(f, flight));
+      // Non-flight jobs get an explicit id; flights derive theirs, which is what
+      // keeps every row written before Phase 1 working without a migration.
+      const flight: Job = wantsFlight
+        ? {
+            kind,
+            flightNumber: body.flightNumber,
+            date: body.date,
+            ...pickupFieldsFrom(body),
+          }
+        : {
+            kind,
+            id: randomHex(6),
+            targetTime: body.targetTime,
+            endTime: body.endTime ?? null,
+            place: body.place ?? null,
+            placeCode: body.placeCode ?? null,
+            ...pickupFieldsFrom(body),
+          };
+
+      if (!wantsFlight) {
+        list.flights.push(flight);
+        await saveList(env, body.listCode, list);
+        return json({ flight, status: null });
+      }
+
+      // Validated above, so this is a real flight identity from here down.
+      const ref: FlightRef = { flightNumber: body.flightNumber!, date: body.date! };
+      const existing = list.flights.find((f) => isFlightJob(f) && sameFlight(f, ref));
       if (existing) {
         // Re-adding fills in details rather than duplicating — but only ones
         // actually supplied. Clearing a field is PATCH's job; a re-add that
@@ -241,11 +299,11 @@ export default {
       }
       await saveList(env, body.listCode, list);
 
-      await addToAllTracked(env, flight);
-      const trackers = await getTrackers(env, flight);
+      await addToAllTracked(env, ref);
+      const trackers = await getTrackers(env, ref);
       if (!trackers.includes(body.listCode)) {
         trackers.push(body.listCode);
-        await saveTrackers(env, flight, trackers);
+        await saveTrackers(env, ref, trackers);
       }
 
       // Fetch immediately so the UI has something to show without waiting for the next cron
@@ -254,9 +312,14 @@ export default {
       // will pick up a real status once the lookup starts working again.
       let status: FlightStatus | null = null;
       try {
-        status = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
+        status = await fetchFlightStatus(env.AERODATABOX_KEY, ref);
         if (status) {
-          await env.FLIGHT_DATA.put(flightKey(flight), JSON.stringify(status));
+          await env.FLIGHT_DATA.put(flightKey(ref), JSON.stringify(status));
+        }
+        // The add already paid a unit, so bank it: without a schedule this
+        // flight reads as "due" and the next cron tick would spend another.
+        if (status) {
+          await setSchedule(env, ref, computeNextPollAt(status, Date.now(), false));
         }
       } catch (err) {
         console.error(`Immediate status fetch failed for ${flight.flightNumber} (${flight.date}):`, err);
@@ -277,28 +340,30 @@ export default {
       // Only serve history for a flight the caller's own list is tracking.
       const list = await getList(env, listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
-      const flight: TrackedFlight = { flightNumber, date };
-      if (!list.flights.some((f) => sameFlight(f, flight))) {
+      const flight: FlightRef = { flightNumber, date };
+      if (!list.flights.some((f) => isFlightJob(f) && sameFlight(f, flight))) {
         return json({ error: "Flight is not on this list" }, 404);
       }
 
       return json({ history: await getHistory(env, flight) });
     }
 
-    // PATCH /api/flights — edit pickup details without re-adding the flight
+    // PATCH /api/flights — edit pickup details without re-adding the job.
+    // Addressed by job id: "NUMBER:DATE" for a flight, the stored id otherwise.
     if (request.method === "PATCH" && url.pathname === "/api/flights") {
-      const body = (await request.json()) as TrackedFlight & { listCode?: string };
-      if (!body.listCode || !body.flightNumber || !body.date) {
-        return json({ error: "listCode, flightNumber and date are required" }, 400);
-      }
+      const body = (await request.json()) as Job & { listCode?: string; id?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+
+      const wanted = body.id ?? (body.flightNumber && body.date
+        ? `${body.flightNumber}:${body.date}`
+        : null);
+      if (!wanted) return json({ error: "id, or flightNumber and date, are required" }, 400);
 
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const entry = list.flights.find((f) =>
-        sameFlight(f, { flightNumber: body.flightNumber, date: body.date })
-      );
-      if (!entry) return json({ error: "Flight is not on this list" }, 404);
+      const entry = list.flights.find((f) => jobId(f) === wanted);
+      if (!entry) return json({ error: "Job is not on this list" }, 404);
 
       Object.assign(entry, pickupFieldsFrom(body));
       await saveList(env, body.listCode, list);
@@ -313,10 +378,12 @@ export default {
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const current = { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) };
+      const current = resolveSettings(list.settings);
       const settings: ListSettings = {
         driveMinutes: body.driveMinutes ?? current.driveMinutes,
         bufferMinutes: body.bufferMinutes ?? current.bufferMinutes,
+        checkInLeadMinutes: body.checkInLeadMinutes ?? current.checkInLeadMinutes,
+        checkInLeadIntlMinutes: body.checkInLeadIntlMinutes ?? current.checkInLeadIntlMinutes,
         showPassengerNames: body.showPassengerNames ?? current.showPassengerNames,
       };
 
@@ -325,23 +392,29 @@ export default {
       return json({ settings });
     }
 
-    // DELETE /api/flights — stop tracking: { listCode, flightNumber, date }
+    // DELETE /api/flights — stop tracking a job, addressed by job id.
     if (request.method === "DELETE" && url.pathname === "/api/flights") {
-      const body = (await request.json()) as TrackedFlight & { listCode?: string };
-      if (!body.listCode || !body.flightNumber || !body.date) {
-        return json({ error: "listCode, flightNumber and date are required" }, 400);
-      }
+      const body = (await request.json()) as Job & { listCode?: string; id?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+
+      const wanted = body.id ?? (body.flightNumber && body.date
+        ? `${body.flightNumber}:${body.date}`
+        : null);
+      if (!wanted) return json({ error: "id, or flightNumber and date, are required" }, 400);
 
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const flight: TrackedFlight = { flightNumber: body.flightNumber, date: body.date };
-      list.flights = list.flights.filter((f) => !sameFlight(f, flight));
+      const removed = list.flights.find((f) => jobId(f) === wanted);
+      list.flights = list.flights.filter((f) => jobId(f) !== wanted);
       await saveList(env, body.listCode, list);
 
-      const trackers = (await getTrackers(env, flight)).filter((c) => c !== body.listCode);
-      await saveTrackers(env, flight, trackers);
-      await removeFromAllTrackedIfOrphaned(env, flight, trackers);
+      // Only flight jobs hold shared records that need unwinding.
+      if (removed && isFlightJob(removed)) {
+        const trackers = (await getTrackers(env, removed)).filter((c) => c !== body.listCode);
+        await saveTrackers(env, removed, trackers);
+        await removeFromAllTrackedIfOrphaned(env, removed, trackers);
+      }
 
       return json({ ok: true });
     }
@@ -351,21 +424,48 @@ export default {
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
     const tracked = await getAllTracked(env);
+    const now = Date.now();
+
+    // Cron still wakes every 20 minutes — that part is free — but it now asks
+    // which flights are actually DUE rather than polling all of them. The
+    // assignment email already supplies a usable scheduled time, so a unit is
+    // only worth spending when the answer could still change what the driver does.
+    // An absent schedule means due: never skip a flight because a schedule
+    // failed to compute.
+    // An ABSENT schedule means due — never skip a flight whose schedule failed
+    // to compute. DONE_POLLING is a separate, explicit sentinel: it is also
+    // falsy-adjacent in spirit, so conflating the two would poll every landed
+    // flight on every tick, which is the waste this mechanism exists to avoid.
+    const schedules = await Promise.all(tracked.map((f) => getSchedule(env, f)));
+    const due = tracked.filter((_, i) => {
+      const at = schedules[i];
+      if (at === DONE_POLLING) return false;
+      return !at || new Date(at).getTime() <= now;
+    });
+    if (!due.length) return;
 
     // Independent per-flight, so poll and notify for all of them concurrently
     // instead of paying each flight's KV + AeroDataBox round-trip in sequence.
     await Promise.all(
-      tracked.map(async (flight) => {
+      due.map(async (flight) => {
         try {
           const key = flightKey(flight);
           const prevRaw = await env.FLIGHT_DATA.get(key);
           const prev: FlightStatus | null = prevRaw ? JSON.parse(prevRaw) : null;
 
           const next = await fetchFlightStatus(env.AERODATABOX_KEY, flight);
-          if (!next) return;
+          if (!next) {
+            // Unknown to AeroDataBox — back off rather than retrying every tick.
+            await setSchedule(env, flight, new Date(now + 6 * 3600 * 1000).toISOString());
+            return;
+          }
 
           const changes = diffFlightStatus(prev, next);
           await env.FLIGHT_DATA.put(key, JSON.stringify(next));
+
+          // A flight that just moved is likely to move again, so tighten the
+          // cadence. That is where the units genuinely buy something.
+          await setSchedule(env, flight, computeNextPollAt(next, now, changes.length > 0));
 
           if (changes.length > 0) {
             await appendHistory(env, flight, changes);
@@ -381,7 +481,7 @@ export default {
                 let title = `${flight.flightNumber} — ${next.status}`;
                 try {
                   const list = await getList(env, code);
-                  const entry = list && list.flights.find((f) => sameFlight(f, flight));
+                  const entry = list && list.flights.find((f) => isFlightJob(f) && sameFlight(f, flight));
                   if (entry && entry.passenger) {
                     title = `${entry.passenger} · ${title}`;
                   }
@@ -396,8 +496,12 @@ export default {
           await stopPollingIfLongLanded(env, flight, next);
         } catch (err) {
           console.error(`Failed to poll ${flight.flightNumber} (${flight.date}):`, err);
+          // A failed poll must not leave the flight due forever, re-spending a
+          // unit every tick on something that is erroring.
+          await setSchedule(env, flight, new Date(now + 30 * 60 * 1000).toISOString());
         }
       })
     );
+
   },
 };

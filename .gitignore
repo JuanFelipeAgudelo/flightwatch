@@ -1,3 +1,5 @@
+spike/pdfs/
+spike/*.json
 node_modules/
 .wrangler/
 .dev.vars
