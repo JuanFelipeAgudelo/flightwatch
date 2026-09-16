@@ -390,6 +390,7 @@ export default {
         driveMinutes: body.driveMinutes ?? current.driveMinutes,
         bufferMinutes: body.bufferMinutes ?? current.bufferMinutes,
         checkInLeadMinutes: body.checkInLeadMinutes ?? current.checkInLeadMinutes,
+        checkInLeadIntlMinutes: body.checkInLeadIntlMinutes ?? current.checkInLeadIntlMinutes,
         showPassengerNames: body.showPassengerNames ?? current.showPassengerNames,
       };
 

@@ -185,6 +185,44 @@ Success bar: ~95% clean parse with the failures named and understood.
 
 `pypdf` handles these files (verified — 251/251 extracted with no errors).
 
+## Timing rules — from the department's own manuals
+
+These are quoted, not invented. Source: `manual-dept-guidelines-2025.pdf` and
+`manual-scheduling-dec25.pdf` (owner's `TRNP_Manuals.zip`). Everything the app
+computes should trace back to one of these rather than to a made-up default.
+
+| Rule | Value | Quote |
+|---|---|---|
+| Arrival pickup margin | **15 min** | "Drivers should arrive at the airport approximately 15 minutes before the arrival time of the flight" |
+| Departure check-in, domestic | **1½ h** | "TSA recommends that passengers with Pre-Check arrive at the airport at least 1½ hours before their flight departs" |
+| Departure check-in, international | **2 h** | "...at least 2 hours before their flight departs" |
+| Deplaning, domestic | **45 min** | "For Domestic arrivals add 45 minutes for the return time to account for waiting for luggage" |
+| Deplaning, international | **60 min** | "For International arrivals add one hour for the return time to account for baggage claim and customs" |
+| Offsite pickup pad | **30 min** | "For any offsite pick-up, add 30 minutes for the return time in case a passenger needs to stop along the way" |
+
+**This answers the handoff's open question** about whether the buffer covers
+deplaning: it does not, and the two are separate numbers. The 15-minute margin
+is about when the *driver* should be standing there; the 45/60 minutes is how
+long they then wait before the passenger is in the car.
+
+Other findings that matter:
+
+- **Drive times are not the driver's to guess.** "Always consult HuB to check
+  for recommended combos and **approved travel times**" — there is an official
+  table. The app's `driveMinutes` should be seeded from it, not invented.
+- **Curbside pickup is not the default.** "Curbside Pick-ups are not scheduled
+  in advance. The driver should always try and park first... meet the passenger
+  in person, inside at baggage claim for domestic flights, or at the customs
+  exit for international flights." So the baggage-belt field is directly
+  actionable — it is where the driver physically stands.
+- **Dispatch verifies flights by hand**, on flightview.com, and stamps the
+  office notes. Live status in the app is genuinely new capability, not a
+  duplicate of something they already automate.
+- The scheduling system already has a **Recommended Departure Time (RDT)** and a
+  passenger's **Preferred Departure Time (PDT)**. Worth checking whether an
+  assignment PDF ever carries the RDT — if it does, the app should show it
+  beside its own leave-by rather than competing with it.
+
 ## Phase 1 — generalise leave-by to a target time
 
 A tracked thing gains a `kind`: `flight` | `appointment` | `shift`. Leave-by

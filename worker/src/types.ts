@@ -136,22 +136,37 @@ export function jobId(job: Job): string {
 // Feeds the "leave by" computation and the list-wide display choices. Density and
 // theme are deliberately NOT here — those are per-device (a dispatcher's tablet and
 // a driver's phone can share a list code and want different views).
+// Defaults follow the department's own written guidelines rather than being
+// invented here — see docs/spec-assignments.md for the quoted rules.
 export interface ListSettings {
   driveMinutes: Record<string, number>; // place code -> minutes, e.g. { JFK: 75 }
+  // "Drivers should arrive at the airport approximately 15 minutes before the
+  // arrival time of the flight" — dept guidelines. This is that margin, and it
+  // doubles as the general pad for non-flight jobs.
   bufferMinutes: number;
-  // Departures only: how early the passenger must be at the terminal. Arrival
-  // pickups count back from touchdown; departures count back from that, minus
-  // this. It is the term that makes the two directions different formulas.
-  checkInLeadMinutes: number;
+  // Departures only: how early the passenger must be at the terminal. TSA
+  // PreCheck guidance as cited by the department — 1.5h domestic, 2h
+  // international. Arrival pickups count back from touchdown; departures count
+  // back from wheels-up minus this, which is what makes them a second formula.
+  checkInLeadMinutes: number; // domestic
+  checkInLeadIntlMinutes: number;
   showPassengerNames: boolean;
 }
 
 export const DEFAULT_SETTINGS: ListSettings = {
   driveMinutes: {},
-  bufferMinutes: 10,
-  checkInLeadMinutes: 120,
+  bufferMinutes: 15,
+  checkInLeadMinutes: 90,
+  checkInLeadIntlMinutes: 120,
   showPassengerNames: true,
 };
+
+// How long the driver waits airside after touchdown before the passenger is
+// actually in the car: "For Domestic arrivals add 45 minutes for the return
+// time to account for waiting for luggage. For International arrivals add one
+// hour to account for baggage claim and customs."
+export const DEPLANE_DOMESTIC_MINUTES = 45;
+export const DEPLANE_INTL_MINUTES = 60;
 
 // One private per-person list, keyed by an opaque list code the client holds
 // in localStorage.

@@ -26,7 +26,14 @@ let ntfyTopic = localStorage.getItem(LS_NTFY_TOPIC);
 let density = localStorage.getItem(LS_DENSITY) === "card" ? "card" : "board";
 let themeMode = localStorage.getItem(LS_THEME) || "auto"; // auto | night | day
 
-let settings = { driveMinutes: {}, bufferMinutes: 10, showPassengerNames: true };
+// Mirrors the Worker's DEFAULT_SETTINGS, which follow the department's written
+// guidelines: arrive 15m before a landing, 1.5h/2h check-in for a departure.
+const DEFAULT_SETTINGS = {
+  driveMinutes: {}, bufferMinutes: 15,
+  checkInLeadMinutes: 90, checkInLeadIntlMinutes: 120,
+  showPassengerNames: true,
+};
+let settings = { ...DEFAULT_SETTINGS };
 let entries = [];
 let offline = false;
 let lastFetchedAt = 0;      // epoch ms of the last successful load
@@ -252,6 +259,26 @@ function targetFor(entry) {
   };
 }
 
+function isInternational(entry) {
+  if (!entry.status) return false;
+  const zones = [entry.status.departure.timeZone, entry.status.arrival.timeZone].filter(Boolean);
+  if (zones.length < 2) return false;
+  return zones.some((z) => !/^America\//.test(z));
+}
+
+function checkInLeadFor(entry) {
+  return isInternational(entry)
+    ? (settings.checkInLeadIntlMinutes ?? 120)
+    : (settings.checkInLeadMinutes ?? 90);
+}
+
+// How long after touchdown before the passenger is actually in the car. The
+// department allows 45m domestic for luggage, 60m international for claim and
+// customs — so a landed flight is not a finished job.
+function deplaneMinutes(entry) {
+  return isInternational(entry) ? 60 : 45;
+}
+
 // leaveBy = target − checkInLead (departures only) − drive − buffer, computed in
 // the destination's own wall-clock so it never crosses a timezone. Returns
 // {unset} when the drive time isn't set — a guessed number would put someone at
@@ -266,8 +293,10 @@ function leaveByFor(entry) {
   const wall = parseWall(target.local);
   if (!wall) return null;
 
-  // A departure has to be there before the plane leaves, not as it leaves.
-  const lead = target.kind === "departure" ? (settings.checkInLeadMinutes || 0) : 0;
+  // A departure has to be there before the plane leaves, not as it leaves — and
+  // an international one needs longer. Inferred from the far end's timezone,
+  // which is a proxy, not a fact: Canada and Mexico read as America/* too.
+  const lead = target.kind === "departure" ? checkInLeadFor(entry) : 0;
   const at = new Date(wall.getTime() - (lead + drive + settings.bufferMinutes) * 60000);
   const s = at.toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC",
@@ -779,7 +808,8 @@ function renderHome() {
 
 let detailKey = null; // "NUMBER:DATE" of the flight currently open
 
-function legLine(status, side) {
+function legLine(entry, side) {
+  const status = entry.status;
   const leg = status[side];
   const arriving = side === "arrival";
   const bits = [];
@@ -788,6 +818,9 @@ function legLine(status, side) {
   if (leg.terminal) bits.push(`Terminal ${leg.terminal}`);
   if (leg.gate) bits.push(`gate ${leg.gate}`);
   if (arriving && leg.baggageBelt) bits.push(`claim ${leg.baggageBelt}`);
+  // Touchdown isn't handover: the department allows 45m domestic / 60m
+  // international before the passenger is actually in the car.
+  if (arriving) bits.push(`allow ${deplaneMinutes(entry)}m for bags`);
   const delay = delayMinutes(leg);
   return {
     title: esc(leg.airport || leg.airportCode || "—"),
@@ -836,8 +869,8 @@ function renderDetail(entry, history) {
         ${entryChip(entry)}
       </div>`;
 
-    const dep = legLine(status, "departure");
-    const arrL = legLine(status, "arrival");
+    const dep = legLine(entry, "departure");
+    const arrL = legLine(entry, "arrival");
     legs = `
       <div class="irow">
         <svg><use href="#i-plane-takeoff" /></svg>
@@ -1025,7 +1058,7 @@ async function ensureList() {
 
 function applyPayload(data, fromCache) {
   ntfyTopic = data.ntfyTopic;
-  settings = Object.assign({ driveMinutes: {}, bufferMinutes: 10, showPassengerNames: true }, data.settings || {});
+  settings = Object.assign({ ...DEFAULT_SETTINGS }, data.settings || {});
   entries = data.entries || [];
   lastFetchedIso = entries.reduce(
     (newest, e) => (e.status && e.status.fetchedAt > (newest || "") ? e.status.fetchedAt : newest),
