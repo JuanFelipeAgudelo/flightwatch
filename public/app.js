@@ -142,14 +142,48 @@ function formatDuration(ms) {
 
 /* ================= DERIVED ================= */
 
-// Sort key. Flights have a real instant; fixed-time jobs only have a wall clock,
-// which is close enough to order by given every place involved is Eastern.
+// Sort key, and the basis for "is this in the past" — so it must be a REAL
+// instant, not a wall clock. parseWall deliberately parses "06:00" as 06:00 UTC
+// because for display that string is only ever a carrier; comparing that raw
+// value against a flight's true instant, or against Date.now(), is four or five
+// hours wrong. Fixed-time jobs are local to places that are all US/Eastern, so
+// they are resolved through that zone.
+const LOCAL_ZONE = "America/New_York";
+
+// Offset of a zone from UTC at a given instant, in ms. Derived from the parts
+// the formatter reports rather than assumed, so DST is handled.
+function zoneOffsetMs(date, zone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(date).reduce((acc, p) => {
+    if (p.type !== "literal") acc[p.type] = p.value;
+    return acc;
+  }, {});
+  const asUtc = Date.UTC(
+    +parts.year, +parts.month - 1, +parts.day,
+    +parts.hour % 24, +parts.minute, +parts.second
+  );
+  return asUtc - date.getTime();
+}
+
+// Turn a wall-clock string in `zone` into the real instant it names.
+function wallToInstant(raw, zone) {
+  const wall = parseWall(raw);
+  if (!wall) return null;
+  // The offset depends on the instant, which depends on the offset; one
+  // correction pass is enough outside the ambiguous hour at a DST boundary.
+  const guess = wall.getTime() - zoneOffsetMs(wall, zone);
+  return guess - (zoneOffsetMs(new Date(guess), zone) - zoneOffsetMs(wall, zone));
+}
+
 function targetInstant(entry) {
   const target = targetFor(entry);
   if (!target) return Infinity;
   if (target.utc) return new Date(target.utc).getTime();
-  const wall = parseWall(target.local);
-  return wall ? wall.getTime() : Infinity;
+  const at = wallToInstant(target.local, LOCAL_ZONE);
+  return at === null ? Infinity : at;
 }
 
 // Minutes a leg has slipped versus its schedule, or null when there's no revision.
@@ -259,24 +293,28 @@ function targetFor(entry) {
   };
 }
 
+// Null when it can't be told. Callers must decide which way to fail, because
+// guessing domestic makes the driver leave LATER — the error that misses a flight.
 function isInternational(entry) {
-  if (!entry.status) return false;
+  if (!entry.status) return null;
   const zones = [entry.status.departure.timeZone, entry.status.arrival.timeZone].filter(Boolean);
-  if (zones.length < 2) return false;
+  if (zones.length < 2) return null;
   return zones.some((z) => !/^America\//.test(z));
 }
 
 function checkInLeadFor(entry) {
-  return isInternational(entry)
-    ? (settings.checkInLeadIntlMinutes ?? 120)
-    : (settings.checkInLeadMinutes ?? 90);
+  // Unknown falls to the longer lead: leaving early costs waiting, leaving
+  // late costs the flight.
+  return isInternational(entry) === false
+    ? (settings.checkInLeadMinutes ?? 90)
+    : (settings.checkInLeadIntlMinutes ?? 120);
 }
 
 // How long after touchdown before the passenger is actually in the car. The
 // department allows 45m domestic for luggage, 60m international for claim and
 // customs — so a landed flight is not a finished job.
 function deplaneMinutes(entry) {
-  return isInternational(entry) ? 60 : 45;
+  return isInternational(entry) === true ? 60 : 45;
 }
 
 // leaveBy = target − checkInLead (departures only) − drive − buffer, computed in
@@ -819,8 +857,12 @@ function legLine(entry, side) {
   if (leg.gate) bits.push(`gate ${leg.gate}`);
   if (arriving && leg.baggageBelt) bits.push(`claim ${leg.baggageBelt}`);
   // Touchdown isn't handover: the department allows 45m domestic / 60m
-  // international before the passenger is actually in the car.
-  if (arriving) bits.push(`allow ${deplaneMinutes(entry)}m for bags`);
+  // international before the passenger is actually in the car. Only meaningful
+  // on an arrival JOB — on a departure the arrival leg is the passenger's
+  // destination city, which the driver never sees.
+  if (arriving && kindOf(entry.flight) === "arrival") {
+    bits.push(`allow ${deplaneMinutes(entry)}m for bags`);
+  }
   const delay = delayMinutes(leg);
   return {
     title: esc(leg.airport || leg.airportCode || "—"),

@@ -71,6 +71,11 @@ const POLL_OFFSETS_MS = [6, 3, 2, 0.75, 0.25].map((h) => h * 3600 * 1000);
 // knowable. Arrivals need it; nothing else does.
 const POST_EVENT_POLL_MS = 15 * 60 * 1000;
 
+/** Explicit "nothing more to learn about this flight" marker. Distinct from an
+ *  absent nextPollAt, which means due — conflating them polls every landed
+ *  flight on every tick. */
+export const DONE_POLLING = "done";
+
 /** The next leg event worth anchoring a schedule to: the departure while the
  *  flight is still on the ground, the arrival once it is airborne. Kind-free on
  *  purpose — one flight can be someone's departure and someone else's arrival. */
@@ -96,7 +101,7 @@ export function computeNextPollAt(
   status: FlightStatus,
   now: number,
   unsettled: boolean
-): string | null {
+): string {
   const event = nextLegInstant(status, now);
   if (event === null) return new Date(now + 60 * 60 * 1000).toISOString();
 
@@ -107,7 +112,7 @@ export function computeNextPollAt(
   if (until <= 0) {
     return -until < POST_EVENT_POLL_MS
       ? new Date(event + POST_EVENT_POLL_MS).toISOString()
-      : null;
+      : DONE_POLLING;
   }
 
   if (unsettled) {
@@ -151,6 +156,27 @@ export interface ListSettings {
   checkInLeadMinutes: number; // domestic
   checkInLeadIntlMinutes: number;
   showPassengerNames: boolean;
+}
+
+// Values the app previously shipped as defaults, before the department's
+// manuals were consulted. A list still carrying one of these never chose it —
+// it inherited a guess — so it is upgraded to the documented figure on read.
+// Anything else is a deliberate choice by the owner and is left alone.
+export const SUPERSEDED_DEFAULTS: Partial<Record<keyof ListSettings, number>> = {
+  bufferMinutes: 10,
+  checkInLeadMinutes: 120,
+};
+
+/** Fills in defaults, and replaces values that were only ever an old default. */
+export function resolveSettings(stored?: ListSettings): ListSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...(stored ?? {}) };
+  for (const [key, superseded] of Object.entries(SUPERSEDED_DEFAULTS)) {
+    const k = key as keyof ListSettings;
+    if (merged[k] === superseded) {
+      (merged as Record<string, unknown>)[k] = DEFAULT_SETTINGS[k];
+    }
+  }
+  return merged;
 }
 
 export const DEFAULT_SETTINGS: ListSettings = {

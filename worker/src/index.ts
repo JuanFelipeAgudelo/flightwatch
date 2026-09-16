@@ -3,6 +3,8 @@ import { sendNtfyNotification } from "./ntfy";
 import {
   ALL_TRACKED_KEY,
   DEFAULT_SETTINGS,
+  DONE_POLLING,
+  resolveSettings,
   FLIGHT_KINDS,
   Env,
   FlightStatus,
@@ -149,7 +151,7 @@ async function stopPollingIfLongLanded(env: Env, flight: FlightRef, status: Flig
 // Re-reads the poll set and writes every flight's new schedule in one go. Doing
 // it once at the end rather than per-flight means a tick that polls several
 // flights can't have each write clobber the last.
-async function applySchedules(env: Env, byKey: Map<string, string | null>): Promise<void> {
+async function applySchedules(env: Env, byKey: Map<string, string>): Promise<void> {
   if (!byKey.size) return;
   const all = await getAllTracked(env);
   let touched = false;
@@ -239,7 +241,7 @@ export default {
       );
       return json({
         ntfyTopic: ntfyTopicFor(listCode),
-        settings: { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) },
+        settings: resolveSettings(list.settings),
         entries,
       });
     }
@@ -385,7 +387,7 @@ export default {
       const list = await getList(env, body.listCode);
       if (!list) return json({ error: "Unknown listCode" }, 404);
 
-      const current = { ...DEFAULT_SETTINGS, ...(list.settings ?? {}) };
+      const current = resolveSettings(list.settings);
       const settings: ListSettings = {
         driveMinutes: body.driveMinutes ?? current.driveMinutes,
         bufferMinutes: body.bufferMinutes ?? current.bufferMinutes,
@@ -439,14 +441,21 @@ export default {
     // only worth spending when the answer could still change what the driver does.
     // An absent nextPollAt means due: never skip a flight because a schedule
     // failed to compute.
-    const due = tracked.filter(
-      (f) => !f.nextPollAt || new Date(f.nextPollAt).getTime() <= now
-    );
+    // An ABSENT nextPollAt means due — never skip a flight whose schedule
+    // failed to compute. But computeNextPollAt returns null to mean "done, stop
+    // scheduling", and null is also falsy, so the two must not be conflated:
+    // treating "done" as "due" polls every landed flight on every tick until
+    // the landed-grace sweep removes it, which is exactly the waste this whole
+    // mechanism exists to avoid. DONE_POLLING is the explicit sentinel.
+    const due = tracked.filter((f) => {
+      if (f.nextPollAt === DONE_POLLING) return false;
+      return !f.nextPollAt || new Date(f.nextPollAt).getTime() <= now;
+    });
     if (!due.length) return;
 
     // Each flight's next poll time, applied in one write at the end so a burst
     // of concurrent polls can't lose each other's updates.
-    const rescheduled = new Map<string, string | null>();
+    const rescheduled = new Map<string, string>();
 
     // Independent per-flight, so poll and notify for all of them concurrently
     // instead of paying each flight's KV + AeroDataBox round-trip in sequence.
