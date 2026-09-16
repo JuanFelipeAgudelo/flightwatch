@@ -51,6 +51,34 @@ BASE = "WRK"  # Warwick, 1 Kings Drive
 # ones it has NO evidence for, rather than leaving a silent hole in the table.
 AIRPORTS = {"ALB", "BDL", "EWR", "HPN", "JFK", "LGA", "SWF"}
 
+# Origin-aware drive times, written by --drive-times --save. Derived rather than
+# transcribed by hand, so the numbers can be regenerated from the corpus instead
+# of drifting out of sync with it.
+DRIVE_TIMES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drive_times.json")
+
+
+def load_drive_times():
+    try:
+        with open(DRIVE_TIMES_PATH, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {"base": BASE, "fromBase": {}, "pairs": {}}
+
+
+def drive_for(origin, dest):
+    """Minutes from `origin` to `dest`, or None rather than a guess. The reverse
+    leg stands in for a missing outbound -- the schedule is symmetric in this
+    data -- but two unrelated legs are never averaged into a third number."""
+    if not origin or not dest:
+        return None
+    t = load_drive_times()
+    for key in (f"{origin}>{dest}", f"{dest}>{origin}"):
+        if key in t["pairs"]:
+            return t["pairs"][key]
+    if origin == t.get("base"):
+        return t["fromBase"].get(dest)
+    return None
+
 DT_FMT = "%A, %B %d, %Y %I:%M %p"
 
 HEADER_RE = re.compile(
@@ -65,6 +93,14 @@ START_RE = re.compile(
     r"\s+End date and time\s+(?P<end>" + _DATE + r")")
 FOOTER_RE = re.compile(r"(" + _DATE + r")\s+Page \d+ of \d+")
 NOTES_RE = re.compile(r"Driver notes\s+(?P<notes>.+?)\s*$", re.M)
+
+# "Parking space  WRK-RPG-BSMNT-065" -- the three-letter prefix is the site the
+# vehicle is parked at, which is where the driver's day starts. The value is
+# often EMPTY (dispatch and standby shifts have no vehicle), and then the label
+# sits alone at the end of its line, so the gap must be [ \t] and never \s:
+# crossing the newline silently captures the next row and reports a parking
+# space of "Driver notes" or "Sprinter 350".
+PARKING_RE = re.compile(r"Parking space[ \t]+(?P<code>\S[^\n]*?)[ \t]*$", re.M)
 
 # "WKL   ETA: 10:00 AM   ETD: 10:00 AM   Wallkill | 900 Red Mills Rd."
 STOP_RE = re.compile(
@@ -169,8 +205,14 @@ def parse_assignment(path):
     footers = FOOTER_RE.findall(text)
     notes = NOTES_RE.search(text)
 
+    park = PARKING_RE.search(text)
+    park_code = park.group("code").strip() if park else None
+    origin = park_code.split("-")[0] if park_code and re.match(r"^[A-Z]{3}-", park_code) else None
+
     doc = {
         "assignment": hm.group("num"),
+        "parking": park_code,
+        "origin": origin,
         "driver": hm.group("driver").strip(),
         "start": parse_dt(sm.group("start")),
         "end": parse_dt(sm.group("end")),
@@ -257,6 +299,46 @@ def parse_assignment(path):
     return doc
 
 
+INFO_LABELS = ("Airline/Flight:", "Route:", "Appointment time:", "Arrival time:", "Number:")
+
+
+def row_endpoints(raw):
+    """The Origin and Destination cells of a passenger row, as written.
+
+    These beat the enclosing stop for working out where the driver is going: a
+    row is printed TWICE, once under the pickup stop and once under the
+    drop-off, so the stop it happens to sit under is only right half the time.
+    A JFK departure filed under the Warwick pickup stop yields a 15-minute
+    drive to an airport two hours away."""
+    parts = [p for p in re.split(r"\s{2,}", raw.strip()) if p]
+    idx = next((i for i, p in enumerate(parts)
+                if any(lbl in p for lbl in INFO_LABELS)), None)
+    if idx is None or idx < 3:
+        return None, None
+    return parts[idx - 2], parts[idx - 1]
+
+
+def place_codes(doc):
+    """The document's own place-name -> site-code map, taken from its stops
+    ("EWR Newark" -> EWR). Self-contained, so no hand-maintained gazetteer."""
+    out = {}
+    for s in doc["stops"]:
+        if s.get("place") and re.fullmatch(r"[A-Z]{3}", s["label"] or ""):
+            out[s["place"].strip().lower()] = s["label"]
+    return out
+
+
+def code_for_place(doc, name):
+    if not name:
+        return None
+    key = name.strip().lower()
+    codes = place_codes(doc)
+    if key in codes:
+        return codes[key]
+    head = name.strip().split()[0]
+    return head if re.fullmatch(r"[A-Z]{3}", head) else None
+
+
 def stop_for_line(doc, line_no):
     prev = [s for s in doc["stops"] if s["line"] < line_no]
     return prev[-1] if prev else (doc["stops"][0] if doc["stops"] else None)
@@ -279,6 +361,20 @@ def build_jobs(doc):
         stop = stop_for_line(doc, row["line"])
         date = (stop or {}).get("date") or doc["start"].date()
         job = {"passenger": row["name"], "note": None}
+        # The drive is from where the vehicle is parked to where this job is,
+        # not from a fixed base -- a quarter of these assignments start at
+        # Fishkill rather than Warwick, and that is 15 minutes to Newark.
+        job["originCode"] = doc.get("origin")
+        # Where this job actually takes the driver. For a drop-off that's the
+        # row's Destination; for a pickup the passenger is coming FROM the
+        # airport, so it's the Origin. Falls back to the enclosing stop only
+        # when the row has no usable columns.
+        from_col, to_col = row_endpoints(row["raw"])
+        wanted = from_col if kind == "arrival" else to_col
+        dest_code = code_for_place(doc, wanted) or (stop or {}).get("label")
+        dm = drive_for(doc.get("origin"), dest_code)
+        if dm is not None:
+            job["driveMinutes"] = dm
 
         if kind in ("arrival", "departure"):
             fm = FLIGHT_RE.search(row["raw"])
@@ -371,6 +467,7 @@ def build_jobs(doc):
             "placeCode": doc["stops"][0]["label"] if doc["stops"] else None,
             "note": doc["driver_notes"],
             "passenger": None,
+            "originCode": doc.get("origin"),
         })
 
     if not doc["date_ok"]:
@@ -412,6 +509,8 @@ def main():
     ap.add_argument("--audit", action="store_true")
     ap.add_argument("--drive-times", action="store_true",
                     help="derive a driveMinutes table from scheduled stop gaps")
+    ap.add_argument("--save", action="store_true",
+                    help="with --drive-times, write tools/drive_times.json")
     ap.add_argument("--since", help="only assignments starting on/after YYYY-MM-DD")
     args = ap.parse_args()
 
@@ -481,6 +580,17 @@ def main():
         if missing:
             print(f"\nNo data for: {', '.join(missing)} -- these never appear in the sample "
                   f"and must come from the department's own table, not from a guess.")
+
+        # Persist the ORIGIN-AWARE table too. The per-destination one above is
+        # only correct from base; this is what lets an imported job carry the
+        # drive time for the site its vehicle is actually parked at.
+        if args.save:
+            pair_table = {f"{f}>{t}": round(statistics.median(v))
+                          for (f, t), v in sorted(pairs.items()) if len(v) >= 2}
+            out = {"base": BASE, "fromBase": dict(sorted(table.items())), "pairs": pair_table}
+            with open(DRIVE_TIMES_PATH, "w", encoding="utf-8") as fh:
+                json.dump(out, fh, indent=2)
+            print(f"\nwrote {DRIVE_TIMES_PATH} ({len(pair_table)} origin-aware pairs)")
         return
 
     if args.audit:

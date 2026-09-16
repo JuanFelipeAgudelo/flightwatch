@@ -31,6 +31,15 @@ export interface Job {
   place?: string | null; // "NYP Allen Hospital"
   placeCode?: string | null; // drive-time key, e.g. "WRK", "NYP"
 
+  // Where the driver starts this job: the three-letter site of the parking
+  // space the vehicle is assigned to. The list-wide driveMinutes table is keyed
+  // by destination alone, which only works from a single origin — but the start
+  // really varies (in the owner's own assignments, 107 from Warwick and 37 from
+  // Fishkill), and Warwick→EWR is 75 minutes where Fishkill→EWR is 90. So a job
+  // may carry its own drive time, and it wins over the table when present.
+  originCode?: string | null;
+  driveMinutes?: number | null;
+
   // Pickup metadata. Lives on the list record, never on the shared flight record,
   // so passenger details can't leak between list codes tracking the same flight.
   passenger?: string | null;

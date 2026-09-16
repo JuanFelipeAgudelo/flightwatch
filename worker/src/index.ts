@@ -31,7 +31,7 @@ function sameFlight(a: FlightRef, b: FlightRef): boolean {
   return a.flightNumber === b.flightNumber && a.date === b.date;
 }
 
-type PickupFields = Pick<Job, "passenger" | "pax" | "dropOff" | "note">;
+type PickupFields = Pick<Job, "passenger" | "pax" | "dropOff" | "note" | "originCode" | "driveMinutes">;
 
 // Only copies keys the caller actually sent, so a PATCH that omits `note` leaves
 // the stored note alone instead of blanking it.
@@ -41,6 +41,8 @@ function pickupFieldsFrom(body: Partial<Job>): Partial<PickupFields> {
   if ("pax" in body) out.pax = body.pax ?? null;
   if ("dropOff" in body) out.dropOff = body.dropOff ?? null;
   if ("note" in body) out.note = body.note ?? null;
+  if ("originCode" in body) out.originCode = body.originCode ?? null;
+  if ("driveMinutes" in body) out.driveMinutes = body.driveMinutes ?? null;
   return out;
 }
 

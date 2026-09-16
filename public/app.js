@@ -325,7 +325,13 @@ function leaveByFor(entry) {
   const target = targetFor(entry);
   if (!target || !target.local || !target.placeCode) return null;
 
-  const drive = settings.driveMinutes[target.placeCode];
+  // A job imported from an assignment knows where the driver actually starts
+  // (the parking site), so it carries its own drive time. The list-wide table
+  // is keyed by destination alone and so assumes one fixed origin — true for a
+  // job added by hand, wrong for a day that starts at a different site.
+  const drive = typeof entry.flight.driveMinutes === "number"
+    ? entry.flight.driveMinutes
+    : settings.driveMinutes[target.placeCode];
   if (typeof drive !== "number") return { unset: true, iata: target.placeCode };
 
   const wall = parseWall(target.local);
