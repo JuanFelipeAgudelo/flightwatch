@@ -271,11 +271,43 @@ whether AeroDataBox exposes an airline lookup we already pay for; otherwise ship
 a vendored IATA table. Do not hand-roll a dict of US majors — 31 distinct
 airline strings appear in a 249-document sample, and that is a lower bound.
 
-## Phase 2 — import
+## Phase 2 — import (DONE, 2026-09-16)
 
-Owner hands the PDFs over in a session; the assistant creates the jobs. This was
-a deliberate choice over automation: no email infrastructure, no parser running
-in production, and no email-as-a-write-path security surface.
+`tools/import_assignment.py` turns an assignment PDF into FlightWatch jobs.
+Owner hands the PDFs over in a session; no email infrastructure, no parser
+running in production, no email-as-a-write-path security surface.
+
+**Coverage: 0 files unparsed, 186 unique assignments, 185 producing jobs.**
+The 13 remaining reports are all deliberate: 12 `HO` rows excluded by design,
+and 1 multi-day rollover flagged for a human to confirm.
+
+### Four corrections to Phase 0
+
+1. **Extraction must use pypdf's `layout` mode.** Plain mode interleaves the
+   table columns -- it prints `Time/City:` on a line *above* the row it belongs
+   to, and splits the carrier prefix off the flight number. Every structural
+   claim in this document now derives from layout mode.
+
+2. **A timestamp can wrap mid-value.** `...September 16, 2026 12:00` / newline /
+   `PM`. A header regex with a literal space silently skipped the whole
+   assignment -- including *both* copies of 375126, one of the two live jobs on
+   the day this was written. The corpus is 186 assignments, not 185.
+
+3. **~19% of flight lines carry an inline IATA prefix, not ~30%.** The airline
+   table is needed for the other 81%, exactly as Phase 0 concluded, but the
+   ratio was measured on mangled text.
+
+4. **`Non-Flight Pickup` is a sentinel, not an airline.** 76 rows. The
+   passenger made their own way; the driver still makes the trip, so it becomes
+   a fixed-time job at the stop rather than a dropped row.
+
+### Airline resolution
+
+`tools/airlines.py` is a closed table of the carriers actually seen, and it
+**refuses to guess**: an unknown name is reported, never mapped. A wrong IATA
+code yields a plausible flight number for the wrong flight, which is worse than
+no number at all. Note `"B6".isalpha()` is `False` -- testing IATA codes with
+`isalpha()` silently drops every carrier whose code contains a digit.
 
 ## Phase 3 — rename, only once earned
 
