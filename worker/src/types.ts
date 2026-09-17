@@ -145,10 +145,15 @@ export interface ListSettings {
   // arrival time of the flight" — dept guidelines. This is that margin, and it
   // doubles as the general pad for non-flight jobs.
   bufferMinutes: number;
-  // Departures only: how early the passenger must be at the terminal. TSA
-  // PreCheck guidance as cited by the department — 1.5h domestic, 2h
-  // international. Arrival pickups count back from touchdown; departures count
-  // back from wheels-up minus this, which is what makes them a second formula.
+  // Departures only: how early the passenger must be at the terminal.
+  //   "Domestic: Passengers should arrive at least 2 hours before their flight
+  //    departs / International: ...at least 3 hours"
+  // The same manual ALSO quotes TSA Pre-Check guidance of 1.5h and 2h, and
+  // those are the numbers this app shipped with by mistake — they are a
+  // qualifier for passengers who hold Pre-Check, not the rule. Only 4 of 186
+  // real assignments mention Pre-Check at all, so the document almost never
+  // tells us, and the default has to be the longer lead: guessing Pre-Check
+  // makes the driver leave late, which is the one error that misses a flight.
   checkInLeadMinutes: number; // domestic
   checkInLeadIntlMinutes: number;
   showPassengerNames: boolean;
@@ -160,7 +165,11 @@ export interface ListSettings {
 // Anything else is a deliberate choice by the owner and is left alone.
 export const SUPERSEDED_DEFAULTS: Partial<Record<keyof ListSettings, number>> = {
   bufferMinutes: 10,
-  checkInLeadMinutes: 120,
+  // The Pre-Check figures, which this app wrongly shipped as the defaults for
+  // every passenger. A list still carrying them inherited a mistake rather than
+  // choosing a shorter lead, so it is upgraded to the department's general rule.
+  checkInLeadMinutes: 90,
+  checkInLeadIntlMinutes: 120,
 };
 
 /** Fills in defaults, and replaces values that were only ever an old default. */
@@ -178,8 +187,8 @@ export function resolveSettings(stored?: ListSettings): ListSettings {
 export const DEFAULT_SETTINGS: ListSettings = {
   driveMinutes: {},
   bufferMinutes: 15,
-  checkInLeadMinutes: 90,
-  checkInLeadIntlMinutes: 120,
+  checkInLeadMinutes: 120, // 2h domestic
+  checkInLeadIntlMinutes: 180, // 3h international
   showPassengerNames: true,
 };
 
