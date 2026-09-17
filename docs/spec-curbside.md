@@ -160,6 +160,76 @@ useless at exactly the moment it matters most.**
 So: the full assignment must be readable offline, and step taps and edits must be
 **queued**, not dropped. This lands before the UI, not after.
 
+## What the manuals say, and what it changes
+
+Read properly at the owner's suggestion, rather than skimmed for timing rules.
+Five documents: department guidelines, scheduling, dispatch, HuB essentials,
+office skills.
+
+### GB is the Governing Body. GBA rows are Governing Body Assistant.
+
+96 of the passenger rows in the sample are `GBA`/`GBD` — 20%, not an edge case.
+These runs have their own rules, and three of them reach the app:
+
+- **Curbside is permitted for them.** "Curbside pick-ups are not scheduled in
+  advance. The driver should always try and park first... **Exceptions:** when
+  there is no airport parking available; when there is no parking space for a
+  Sprinter or over-height vehicle; **for members of the GB, Helpers, or BC (if
+  specifically requested)**." So for a GB row the pickup point genuinely may be
+  the curb rather than baggage claim — the app should not assume otherwise.
+- **Never combine without oversight.** "Never combine with other requests
+  without consulting on-site overseer." A GB row must not be treated as a combo
+  candidate the way an ordinary `A` row is.
+- **Notifications are suppressed.** The HuB guide: "**If it is a GB member,
+  always select NO NOTIFICATIONS.**" Curbside pushes ntfy alerts titled with the
+  passenger's name. For a GB passenger that is the thing the department
+  explicitly switches off. **Before any of this reaches another driver, a GB row
+  must suppress push and hide the name by default.**
+
+Also: "Respect confidential information and do not share any details to those
+unauthorized." That raises the bar on the retention rule, not lowers it.
+
+### Combining has written thresholds
+
+- Same site: allowed when flights land **approximately 45 minutes apart**.
+- Different sites: allowed when it does not adversely impact travel times.
+- Older passengers: "typically, they should not be asked to wait more than 15 or
+  20 minutes", and should not be asked to wait for a combination at all.
+
+The app already knows a combo's controlling flight is the latest arrival. These
+give it something to *say*: a combo whose flights are more than 45 minutes apart
+is outside the guideline, and worth flagging rather than silently scheduling.
+
+### Dispatch's departure time may be a deliberate exception
+
+Scheduling enters both a **recommended departure time (RDT)** and the
+passenger's **preferred departure time (PDT)**, and where the PDT is shorter
+than the RDT, that is discussed with the requester and assigned anyway with a
+note. For GB/Helpers/BC the PDT is not to be changed at all.
+
+So an assignment's start time is sometimes a **considered exception, not an
+oversight**. Curbside's own computation must therefore read as advice *beside*
+dispatch's time — never as a correction of it. This sharpens the Right Now copy:
+the app's job is to say when the world has moved since dispatch decided, not to
+second-guess the decision.
+
+### The check-in figures this app shipped were wrong
+
+The guidelines give the rule — "Domestic: passengers should arrive at least
+**2 hours** before their flight departs / International: at least **3 hours**" —
+and separately quote TSA Pre-Check guidance of 1½ and 2 hours for passengers who
+hold Pre-Check. Curbside shipped the Pre-Check pair as the default for everyone,
+telling drivers to leave half an hour late domestically and an hour late
+internationally. Only 4 of 186 assignments mention Pre-Check, so the default has
+to be the longer lead and Pre-Check becomes a per-job shortening.
+
+### Vehicle priority, for context
+
+Approved requests are scheduled first-come first-served in this order: GB /
+Helper / BC, then Passenger Transportation assignments, then Batch department,
+then Medical Services, then other department requests. Not app behaviour, but it
+explains why a GB run displaces other work.
+
 ## Phases
 
 | Phase | What | Why this order |
