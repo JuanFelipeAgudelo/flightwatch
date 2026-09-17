@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from airlines import lookup  # noqa: E402
 from import_assignment import (  # noqa: E402
-    actions_in, build_jobs, code_for_place, dropoff_points, leg_minutes,
+    actions_in, build_assignment, build_jobs, code_for_place, dropoff_points,
+    leg_minutes,
     parse_assignment, parse_flight, party_key, party_label, row_endpoints,
 )
 
@@ -122,6 +123,59 @@ class Steps(unittest.TestCase):
         _jobs, issues = build_jobs(doc)
         self.assertTrue(any("end date" in i for i in issues),
                         f"expected a flagged date disagreement, got {issues}")
+
+
+class Assignments(unittest.TestCase):
+    """The four-level record the app stores: Assignment -> Step -> Action ->
+    Entity. The flat job list it replaces could not hold an itinerary."""
+
+    def test_the_itinerary_survives(self):
+        a = build_assignment(fixture("369736"))
+        self.assertEqual([s["code"] for s in a["steps"]], ["FKL", "LGA", "WKL", "FKL"])
+        lga = a["steps"][1]
+        wkl = a["steps"][2]
+        self.assertEqual(len(lga["actions"]), 1, "one pickup at LGA")
+        self.assertEqual(len(wkl["actions"]), 2, "two drop-offs, two doors")
+        self.assertEqual({act["where"] for act in wkl["actions"]},
+                         {"A Front", "B Carport"})
+
+    def test_a_passenger_appears_at_pickup_and_at_their_own_drop_off(self):
+        a = build_assignment(fixture("369736"))
+        names = [e["name"] for s in a["steps"] for act in s["actions"]
+                 for e in act["entities"]]
+        self.assertEqual(len(names), 4, "two people, each twice — not a duplicate")
+        for door in a["steps"][2]["actions"]:
+            self.assertEqual(len(door["entities"]), 1, "one person per door")
+
+    def test_arrival_and_departure_dates_can_differ(self):
+        """LGA is reached at 11:00 PM and left at 12:00 AM, so its eta belongs
+        to the 31st and its etd to the 1st. Anchoring the stop on one of them
+        dated the other wrongly — and a flight's date came from the stop, so the
+        flight was tracked a day out and would never have resolved."""
+        a = build_assignment(fixture("369736"))
+        lga = next(s for s in a["steps"] if s["code"] == "LGA")
+        self.assertEqual(lga["eta"], "11:00 PM")
+        self.assertEqual(lga["etd"], "12:00 AM")
+        self.assertEqual(lga["etaDate"], "2026-08-31")
+        self.assertEqual(lga["date"], "2026-09-01")
+
+    def test_the_header_fields_real_data_added(self):
+        a = build_assignment(fixture("369736"))
+        self.assertIn("Sienna", a["vehicle"])
+        self.assertTrue(a["parking"].startswith("FKL-NBD"))
+        self.assertEqual(a["originCode"], "FKL")
+        self.assertIsNotNone(a["printedAt"])
+        self.assertFalse(a["gb"])
+
+    def test_an_all_excluded_assignment_keeps_its_shape(self):
+        a = build_assignment(fixture("366824"))
+        self.assertTrue(a["steps"], "the embassy run still has its stops")
+        self.assertTrue(any("not yet supported" in i for i in a["issues"]))
+
+    def test_assistants_are_captured_when_present(self):
+        a = build_assignment(fixture("353328"))
+        self.assertTrue(a["assistants"], "353328 has an assistant table")
+        self.assertIn("role", a["assistants"][0])
 
 
 class Rows(unittest.TestCase):

@@ -1,6 +1,13 @@
 import { diffFlightStatus, fetchFlightStatus } from "./aerodatabox";
 import { sendNtfyNotification } from "./ntfy";
 import {
+  Assignment,
+  assignmentKey,
+  assignmentPrefixFor,
+  flightsOf,
+  isNewerCopy,
+} from "./assignment";
+import {
   ALL_TRACKED_KEY,
   POLL_PREFIX,
   pollKey,
@@ -450,6 +457,125 @@ export default {
         const trackers = (await getTrackers(env, removed)).filter((c) => c !== body.listCode);
         await saveTrackers(env, removed, trackers);
         await removeFromAllTrackedIfOrphaned(env, removed, trackers);
+      }
+
+      return json({ ok: true });
+    }
+
+    // POST /api/assignments — import one assignment, whole.
+    //
+    // The same number UPDATES in place; a different number is a new
+    // assignment. That is the owner's rule and the document's own: the helper
+    // receives the same run under the same number, so the driver is not part of
+    // identity.
+    if (request.method === "POST" && url.pathname === "/api/assignments") {
+      const body = (await request.json()) as Assignment & { listCode?: string };
+      if (!body.listCode) return json({ error: "listCode is required" }, 400);
+      if (!body.number) return json({ error: "number is required" }, 400);
+      if (!body.start || !body.end) return json({ error: "start and end are required" }, 400);
+
+      const list = await getList(env, body.listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      const key = assignmentKey(body.listCode, body.number);
+      const existing = await getJSON<Assignment | null>(env, key, null);
+
+      const incoming: Assignment = {
+        ...body,
+        steps: body.steps ?? [],
+        importedAt: new Date().toISOString(),
+      };
+      delete (incoming as Partial<{ listCode: string }>).listCode;
+
+      // A re-send that reaches us AFTER a newer copy must not overwrite it.
+      if (!isNewerCopy(incoming, existing)) {
+        return json({
+          assignment: existing,
+          applied: false,
+          reason: "a newer copy is already stored",
+        });
+      }
+
+      await putJSON(env, key, incoming);
+
+      // Track every flight the assignment references, deduped: a passenger
+      // appears at both their pickup and their drop-off, which is one flight.
+      const flights = flightsOf(incoming);
+      for (const flight of flights) {
+        await addToAllTracked(env, flight);
+        const trackers = await getTrackers(env, flight);
+        if (!trackers.includes(body.listCode)) {
+          trackers.push(body.listCode);
+          await saveTrackers(env, flight, trackers);
+        }
+      }
+
+      return json({
+        assignment: incoming,
+        applied: true,
+        replaced: Boolean(existing),
+        flightsTracked: flights.length,
+      });
+    }
+
+    // GET /api/assignments?listCode= — every assignment on a list, soonest first.
+    if (request.method === "GET" && url.pathname === "/api/assignments") {
+      const listCode = url.searchParams.get("listCode");
+      if (!listCode) return json({ error: "listCode is required" }, 400);
+
+      const prefix = assignmentPrefixFor(listCode);
+      const assignments: Assignment[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await env.FLIGHT_DATA.list({ prefix, cursor });
+        for (const entry of page.keys) {
+          const found = await getJSON<Assignment | null>(env, entry.name, null);
+          if (found) assignments.push(found);
+        }
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
+
+      assignments.sort((a, b) => a.start.localeCompare(b.start));
+
+      // Live status for every flight referenced, so the client renders an
+      // itinerary without a request per passenger.
+      const statuses: Record<string, FlightStatus> = {};
+      for (const assignment of assignments) {
+        for (const flight of flightsOf(assignment)) {
+          const id = `${flight.flightNumber}:${flight.date}`;
+          if (statuses[id]) continue;
+          const status = await getJSON<FlightStatus | null>(env, flightKey(flight), null);
+          if (status) statuses[id] = status;
+        }
+      }
+
+      const list = await getList(env, listCode);
+      if (!list) return json({ error: "Unknown listCode" }, 404);
+
+      return json({
+        assignments,
+        statuses,
+        settings: resolveSettings(list.settings),
+      });
+    }
+
+    // DELETE /api/assignments — remove one from a list.
+    if (request.method === "DELETE" && url.pathname === "/api/assignments") {
+      const body = (await request.json()) as { listCode?: string; number?: string };
+      if (!body.listCode || !body.number) {
+        return json({ error: "listCode and number are required" }, 400);
+      }
+      const key = assignmentKey(body.listCode, body.number);
+      const existing = await getJSON<Assignment | null>(env, key, null);
+      if (!existing) return json({ error: "Unknown assignment" }, 404);
+
+      await env.FLIGHT_DATA.delete(key);
+
+      // Stop tracking flights nobody else references.
+      for (const flight of flightsOf(existing)) {
+        const trackers = (await getTrackers(env, flight)).filter((c) => c !== body.listCode);
+        await saveTrackers(env, flight, trackers);
+        await removeFromAllTrackedIfOrphaned(env, flight, trackers);
       }
 
       return json({ ok: true });
