@@ -180,14 +180,17 @@ These runs have their own rules, and three of them reach the app:
 - **Never combine without oversight.** "Never combine with other requests
   without consulting on-site overseer." A GB row must not be treated as a combo
   candidate the way an ordinary `A` row is.
-- **Notifications are suppressed.** The HuB guide: "**If it is a GB member,
-  always select NO NOTIFICATIONS.**" Curbside pushes ntfy alerts titled with the
-  passenger's name. For a GB passenger that is the thing the department
-  explicitly switches off. **Before any of this reaches another driver, a GB row
-  must suppress push and hide the name by default.**
+- **Notifications go UP, not down.** The HuB guide's "if it is a GB member,
+  always select NO NOTIFICATIONS" is a setting on the *passenger's* record: it
+  stops HuB emailing them. Passengers never see Curbside. Read as a constraint
+  on this app it would have suppressed exactly the alerts that matter most, so
+  it is recorded here as the opposite: **a GB run should notify the driver more
+  readily than an ordinary one**, and its changes deserve a louder push.
 
-Also: "Respect confidential information and do not share any details to those
-unauthorized." That raises the bar on the retention rule, not lowers it.
+"Respect confidential information and do not share any details to those
+unauthorized" still applies to data at rest -- it is an argument for the
+retention rule, not for hiding anything from the driver, who is the authorized
+party.
 
 ### Combining has written thresholds
 
