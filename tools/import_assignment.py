@@ -378,6 +378,91 @@ def code_for_place(doc, name):
     return head if re.fullmatch(r"[A-Z]{3}", head) else None
 
 
+# "     Drop-off :          A Front" -- layout mode puts a SPACE before the
+# colon, so a startswith("Drop-off:") test matches nothing and every drop-off
+# silently disappears.
+ACTION_LINE = re.compile(r"^\s*(Pickup|Drop-off)\s*:\s*(?P<where>.*?)\s*$")
+
+
+def actions_in(doc):
+    """Every action bar in the document, as (line, verb, where)."""
+    out = []
+    for i, line in enumerate(doc["lines"]):
+        m = ACTION_LINE.match(line)
+        if m:
+            out.append((i, m.group(1).upper(), (m.group("where") or "").strip()))
+    return out
+
+
+def dropoff_points(doc):
+    """passenger name -> the drop-off point their row sits under.
+
+    Each passenger can be set down somewhere different, even off the same
+    flight: assignment 369736 drops one at A Front and one at B Carport."""
+    acts = actions_in(doc)
+    out = {}
+    for row in doc["rows"]:
+        name = row.get("name")
+        if not name:
+            continue
+        prior = [a for a in acts if a[0] < row["line"]]
+        if not prior:
+            continue
+        _line, verb, where = prior[-1]
+        if verb == "DROP-OFF" and where:
+            out.setdefault(name, where)
+    return out
+
+
+def party_key(doc, row, dropoffs=None):
+    """What makes two rows the same party: **same surname, same flight, same
+    drop-off point.**
+
+    Half the passenger groups in the sample are parties rather than
+    individuals -- 103 of 203, all travelling on the same flight -- so without
+    grouping, a couple is two near-identical rows differing only in a given
+    name.
+
+    The drop-off point is the test that keeps it honest. Across 88 same-surname
+    same-flight groups with a known door, every one went to the same door, so
+    the rule costs nothing today. But the owner confirms a passenger can be set
+    down somewhere of their own, and merging two people who part at the kerb
+    would send the driver to one door with someone who belongs at another."""
+    name = row.get("name") or ""
+    surname = name.split(",")[0].strip() if "," in name else name
+    fm = FLIGHT_RE.search(row["raw"])
+    flight = fm.group("rest").strip()[:40] if fm else ""
+    door = (dropoffs or {}).get(name)
+    return (surname, flight, door)
+
+
+def party_label(names):
+    """'Boeck, Christian & Heidi' -- one row, because it is one pickup."""
+    first = names[0]
+    surname = first.split(",")[0].strip() if "," in first else first
+    givens = [n.split(",", 1)[1].strip() for n in names if "," in n]
+    givens = [g for g in givens if g]
+    if not givens:
+        return surname
+    if len(givens) == 1:
+        return f"{surname}, {givens[0]}"
+    return f"{surname}, {', '.join(givens[:-1])} & {givens[-1]}"
+
+
+SITE_CODE = re.compile(r"^[A-Z]{2,5}$")
+
+
+def place_code_of(stop):
+    """The drive-time key for a stop, or None when its label is free text.
+
+    28 of 186 assignments have a stop whose label is a name rather than a code
+    -- "Dispatch", "Enterprise Rent", and one PDF-spacing casualty that extracts
+    as "Dr y LGA, JFK &". Passing those through as a placeCode looks up nothing
+    and shows a truncated fragment where a site code belongs."""
+    label = (stop or {}).get("label") or ""
+    return label if SITE_CODE.match(label) else None
+
+
 def stop_for_line(doc, line_no):
     prev = [s for s in doc["stops"] if s["line"] < line_no]
     return prev[-1] if prev else (doc["stops"][0] if doc["stops"] else None)
@@ -440,7 +525,7 @@ def build_jobs(doc):
                     "kind": "appointment",
                     "targetTime": f"{date.isoformat()} {parse_tod(etd).strftime('%H:%M')}",
                     "place": (stop or {}).get("place"),
-                    "placeCode": (stop or {}).get("label"),
+                    "placeCode": place_code_of(stop),
                     "note": "Non-flight pickup",
                 })
                 key = ("appointment", job["targetTime"], row["name"], job.get("place"))
@@ -472,7 +557,7 @@ def build_jobs(doc):
                     "kind": "appointment",
                     "targetTime": f"{date.isoformat()} {tod.strftime('%H:%M')}",
                     "place": place,
-                    "placeCode": (stop or {}).get("label"),
+                    "placeCode": place_code_of(stop),
                     "note": f"Duration: {dur.group('dur').strip()}" if dur else None,
                 })
             else:  # shuttle -> a fixed-time job at the stop's ETD
@@ -486,7 +571,7 @@ def build_jobs(doc):
                     "kind": "appointment",
                     "targetTime": f"{date.isoformat()} {tod.strftime('%H:%M')}",
                     "place": (stop or {}).get("place"),
-                    "placeCode": (stop or {}).get("label"),
+                    "placeCode": place_code_of(stop),
                     "note": f"Shuttle: {rm.group('route').strip()}" if rm else "Shuttle",
                 })
             key = (job["kind"], job["targetTime"], row["name"], job.get("place"))
@@ -496,14 +581,22 @@ def build_jobs(doc):
         seen.add(key)
         jobs.append(job)
 
-    # No passenger rows at all -> the assignment itself is the job (shift).
-    if not jobs and not any(r["tag"] in EXCLUDED_TAGS for r in doc["rows"]):
+    # No jobs yet -> the assignment itself becomes one, so it still appears.
+    #
+    # This used to be skipped when every row was an excluded type, and the
+    # result was that an assignment made ENTIRELY of TD or HO rows produced
+    # nothing and vanished from the app completely. Real case: 366824 is a run
+    # to the German embassy -- leave Fishkill 8:00 AM, wait 10:45 to 1:00, back
+    # by 3:00 PM. A real day's work, and the driver would have opened Curbside
+    # to an empty screen. Showing the shape of the assignment with its rows
+    # named as unsupported is far better than showing nothing.
+    if not jobs:
         jobs.append({
             "kind": "shift",
             "targetTime": doc["start"].strftime("%Y-%m-%d %H:%M"),
             "endTime": doc["end"].strftime("%Y-%m-%d %H:%M"),
             "place": doc["stops"][0]["place"] if doc["stops"] else None,
-            "placeCode": doc["stops"][0]["label"] if doc["stops"] else None,
+            "placeCode": place_code_of(doc["stops"][0]) if doc["stops"] else None,
             "note": doc["driver_notes"],
             "passenger": None,
             "originCode": doc.get("origin"),

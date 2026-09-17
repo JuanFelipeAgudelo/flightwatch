@@ -20,7 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from airlines import lookup  # noqa: E402
 from import_assignment import (  # noqa: E402
-    build_jobs, code_for_place, parse_assignment, parse_flight, row_endpoints,
+    actions_in, build_jobs, code_for_place, dropoff_points, parse_assignment,
+    parse_flight, party_key, party_label, row_endpoints,
 )
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -174,11 +175,35 @@ class Jobs(unittest.TestCase):
         self.assertEqual(jobs[0]["endTime"], "2026-09-16 17:00")
         self.assertEqual(issues, [])
 
-    def test_excluded_rows_are_named_not_miscounted_as_a_shift(self):
+    def test_excluded_rows_are_named(self):
         doc, jobs, issues = jobs_of("350568")
         self.assertTrue(any("excluded HO" in i for i in issues), issues)
-        self.assertFalse(any(j["kind"] == "shift" for j in jobs),
-                         "an assignment with HO rows is not a passenger-less shift")
+
+    def test_an_all_excluded_assignment_still_appears(self):
+        """366824 is a real run to the German embassy — out at 8:00 AM, back by
+        3:00 PM. Every row is HO, and excluding them used to produce NO jobs at
+        all, so the driver would have opened the app to an empty screen on a
+        working day. The assignment itself becomes the job, and the rows are
+        reported as unsupported rather than silently dropping the whole day."""
+        doc = fixture("366824") if any(n.startswith("366824") for n in os.listdir(FIXTURES)) else None
+        if doc is None:
+            self.skipTest("366824 fixture not generated")
+        jobs, issues = build_jobs(doc)
+        self.assertTrue(jobs, "an all-excluded assignment must still produce something")
+        self.assertEqual(jobs[0]["kind"], "shift")
+        self.assertTrue(any("excluded" in i for i in issues))
+
+    def test_free_text_stop_labels_are_not_drive_time_keys(self):
+        """28 assignments have a stop called "Dispatch" or "Enterprise Rent" —
+        and one that extracts as "Dr y LGA, JFK &" through a PDF spacing fault.
+        Used as a placeCode those look up nothing and put a fragment on screen
+        where a site code belongs."""
+        from import_assignment import place_code_of
+        self.assertIsNone(place_code_of({"label": "Enterprise Rent"}))
+        self.assertIsNone(place_code_of({"label": "Dr y LGA, JFK &"}))
+        self.assertIsNone(place_code_of({"label": "Dispatch"}))
+        self.assertEqual(place_code_of({"label": "WRK"}), "WRK")
+        self.assertEqual(place_code_of({"label": "EWR"}), "EWR")
 
     def test_non_flight_pickup_still_produces_a_job(self):
         """The passenger made their own way; the driver still makes the trip."""
@@ -206,6 +231,66 @@ class Jobs(unittest.TestCase):
         self.assertEqual(jobs[0]["kind"], "shift")
         self.assertIn("Stage at NCB by 5:50am", jobs[0]["note"])
         self.assertGreaterEqual(len(doc["stops"]), 2, "a shuttle still has stops")
+
+
+class Parties(unittest.TestCase):
+    """Half the passenger groups in the sample are parties, not individuals —
+    103 of 203, every one on the same flight. Without grouping, a couple is two
+    near-identical rows differing only in a given name."""
+
+    @staticmethod
+    def _row(name, flight):
+        return {"name": name, "line": 0,
+                "raw": f"  {name}   LGA LaGuardia   Wallkill   Airline/Flight: {flight}"}
+
+    def test_same_surname_same_flight_same_door_is_one_party(self):
+        rows = [self._row("Boeck, Christian", "Lufthansa LH7603"),
+                self._row("Boeck, Heidi", "Lufthansa LH7603")]
+        doors = {"Boeck, Christian": "A Front", "Boeck, Heidi": "A Front"}
+        keys = {party_key(None, r, doors) for r in rows}
+        self.assertEqual(len(keys), 1, "a couple to one door should be one row")
+
+    def test_different_drop_off_doors_never_merge(self):
+        """The owner confirms a passenger can be set down somewhere of their own.
+        It does not occur in the sample — 88 of 88 same-surname same-flight
+        groups share a door — so this is tested directly rather than through a
+        fixture that cannot exercise it. Merging two people who part at the kerb
+        would send the driver to one door with someone who belongs at another."""
+        rows = [self._row("Boeck, Christian", "Lufthansa LH7603"),
+                self._row("Boeck, Heidi", "Lufthansa LH7603")]
+        doors = {"Boeck, Christian": "A Front", "Boeck, Heidi": "B Carport"}
+        keys = {party_key(None, r, doors) for r in rows}
+        self.assertEqual(len(keys), 2, "different doors must stay separate rows")
+
+    def test_different_flights_never_merge(self):
+        rows = [self._row("Boeck, Christian", "Lufthansa LH7603"),
+                self._row("Boeck, Heidi", "United Airlines UA995")]
+        doors = {"Boeck, Christian": "A Front", "Boeck, Heidi": "A Front"}
+        self.assertEqual(len({party_key(None, r, doors) for r in rows}), 2)
+
+    def test_real_fixture_keeps_its_two_passengers_apart(self):
+        doc = fixture("369736")
+        doors = dropoff_points(doc)
+        self.assertGreaterEqual(len(set(doors.values())), 2,
+                                f"expected two distinct doors, got {doors}")
+        rows = [r for r in doc["rows"] if r.get("name")]
+        self.assertEqual(len({party_key(doc, r, doors) for r in rows}), 2)
+
+    def test_drop_off_points_are_found_at_all(self):
+        """Layout mode writes "Drop-off :" with a space before the colon. A
+        startswith("Drop-off:") test matches nothing and every drop-off silently
+        disappears."""
+        doc = fixture("369736")
+        verbs = {v for _line, v, _w in actions_in(doc)}
+        self.assertIn("DROP-OFF", verbs)
+        self.assertIn("PICKUP", verbs)
+
+    def test_party_label_reads_as_one_party(self):
+        self.assertEqual(party_label(["Boeck, Christian", "Boeck, Heidi"]),
+                         "Boeck, Christian & Heidi")
+        self.assertEqual(party_label(["Ruiz, Ana", "Ruiz, Ben", "Ruiz, Cleo"]),
+                         "Ruiz, Ana, Ben & Cleo")
+        self.assertEqual(party_label(["Ruiz, Ana"]), "Ruiz, Ana")
 
 
 class Flights(unittest.TestCase):

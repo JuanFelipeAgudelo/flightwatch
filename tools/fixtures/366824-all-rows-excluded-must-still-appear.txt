@@ -1,0 +1,79 @@
+Assignment Details
+
+
+ Assignment number               366824                                               Driver                          Reyes, Mara         
+ Start date and time             Tuesday, August 18, 2026 8:00 AM                     End date and time               Tuesday, August 18, 2026 3:00 PM
+ Vehicle                         Branch (72398) 2020 Toyota Sienna (7                 Parking space                   FKL-NBD-003
+                                 Seats)
+
+
+
+
+
+ Driver notes                    Drop off passengers to Embassy. Pickup when they are ready and return to FKL.
+                                 Address: 871 United Nations Plaza, New York, NY 10017
+
+
+ FKL                    ETA:                ETD: 8:00 AM         Fishkill | 33 Vaughn Way
+     Pickup:                                                              CLN - 800 Sacandaga Loop, Beacon, NY
+                        Passenger                         Origin                 Destination             Information                                          Bags
+                        Keller, Mara                      Fishkill               Germany Embesy          Arrival time: 10:30 AM
+             HO          Phone:
+                         +1 555-0100-000
+                        Keller, Nils                      Fishkill               Germany Embesy          Arrival time: 10:30 AM
+             HO          Phone:
+                         +1 555-0100-000
+
+ Germany                ETA: 10:45 AM       ETD: 1:00 PM         Germany Embesy | 871 United Nations Plaza, New York , New York 10017
+ Embesy
+     Drop-off :
+                        Passenger                         Origin                 Destination             Information                                          Bags
+                        Keller, Mara                      Fishkill               Germany Embesy          Arrival time: 10:30 AM
+             HO          Phone:
+                         +1 555-0100-000
+                        Keller, Nils                      Fishkill               Germany Embesy          Arrival time: 10:30 AM
+             HO          Phone:
+                         +1 555-0100-000
+     Pickup:
+                        Passenger                         Origin                 Destination             Information                                          Bags
+                        Keller, Mara                      Germany Embesy         Fishkill                Arrival time: 4:00 PM
+             HO          Phone:
+                         +1 555-0100-000
+                        Keller, Nils                      Germany Embesy         Fishkill                Arrival time: 4:00 PM
+             HO          Phone:
+                         +1 555-0100-000
+
+ FKL                    ETA: 3:00 PM        ETD:                 Fishkill | 33 Vaughn Way
+     Drop-off :                                                           CLN - 800 Sacandaga Loop, Beacon, NY
+                        Passenger                         Origin                 Destination             Information                                          Bags
+                        Keller, Mara                      Germany Embesy         Fishkill                Arrival time: 4:00 PM
+             HO          Phone:
+                         +1 555-0100-000
+                        Keller, Nils                      Germany Embesy         Fishkill                Arrival time: 4:00 PM
+             HO          Phone:
+                         +1 555-0100-000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Monday, August 17, 2026 4:50 PM                                                                                                                           Page 1 of 1
