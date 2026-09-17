@@ -1,0 +1,149 @@
+Assignment Details
+
+
+ Assignment number                356385                                                   Driver                           Harkaway, Pia       
+ Start date and time              Monday, July 6, 2026 3:30 PM                             End date and time                Monday, July 6, 2026 10:00 PM
+ Vehicle                          Branch (72614) 2023 Mercedes Benz                        Parking space                    WRK-RPG-BSMNT-071
+                                  Sprinter 2500 (12 Seats)
+
+
+
+
+
+ Driver notes                     **Update:** Use Sprinter 72614 to pick up at RCA-2616 at 4:30pm, then at Warwick at 5:45pm, drop off Seki at JFK (not for
+                                  a flight), pick up the Tan family at JFK curbside if needed and return to Warwick.
+
+
+ WRK                    ETA:                 ETD: 3:30 PM         Warwick | 1 Kings Drive
+
+ FKL                    ETA: 4:30 PM         ETD: 4:30 PM         Fishkill | 33 Vaughn Way
+     Pickup:                                                                RCA - 2600's Boscobel Loop
+                        Passenger                           Origin                  Destination            Information                                                  Bags
+                        Dunmore, Pia                        Fishkill                JFK Kennedy            Airline/Flight: Delta Air Lines 114
+              D           Phone:
+                          +1 9172598277                                                                    Time/City: 10:25 PM OPO
+                          Notes: RCA-2616
+
+ WRK                    ETA: 5:45 PM         ETD: 5:45 PM         Warwick | 1 Kings Drive
+     Pickup:                                                                D-res WRK
+                        Passenger                           Origin                  Destination            Information                                                  Bags
+                        Quilliam, Otto                      Warwick                 JFK Kennedy            Airline/Flight: Delta Air Lines DL0114                             2
+              D           Phone:
+                          +1 555-0100-000                                                                  Time/City: 10:25 PM Porto, Portugal (OPO)
+                        Quilliam, Greta                     Warwick                 JFK Kennedy            Airline/Flight: Delta Air Lines DL0114                             2
+              D           Phone:
+                          +1 555-0100-000                                                                  Time/City: 10:25 PM Porto, Portugal (OPO)
+     Pickup:                                                                Warwick Main Lobby
+                        Passenger                           Origin                  Destination            Information                                                  Bags
+                        Alderton, Cleo                      Warwick                 JFK Kennedy            Airline/Flight: Non-Flight Pickup 0                                2
+              D           Phone:
+                          +81 70-8466-3645                                                                 Time/City: 10:00 PM 0
+                          Notes: Please note your leave time is 5:45 as we needed to combine this with other passengers. Thank you.
+                        Alderton                            Warwick                 JFK Kennedy            Airline/Flight: Non-Flight Pickup 0                                2
+              D           Phone:
+                          +81 70-8466-3645                                                                 Time/City: 10:00 PM 0
+
+ JFK                    ETA: 7:45 PM         ETD: 8:00 PM         JFK Kennedy | JFK Expressway Jamaica, NY 11430
+     Drop-off :
+                        Passenger                           Origin                  Destination            Information                                                  Bags
+                        Dunmore, Pia                        Fishkill                JFK Kennedy            Airline/Flight: Delta Air Lines 114
+              D           Phone:
+                          +1 9172598277                                                                    Time/City: 10:25 PM OPO
+                          Notes: RCA-2616
+     Drop-off :                                                             Departure Terminal
+                        Passenger                           Origin                  Destination            Information                                                  Bags
+                        Alderton, Cleo                      Warwick                 JFK Kennedy            Airline/Flight: Non-Flight Pickup 0                                2
+              D           Phone:
+                          +81 70-8466-3645                                                                 Time/City: 10:00 PM 0
+                          Notes: Please note your leave time is 5:45 as we needed to combine this with other passengers. Thank you.
+                        Alderton                            Warwick                 JFK Kennedy            Airline/Flight: Non-Flight Pickup 0                                2
+              D           Phone:
+                          +81 70-8466-3645                                                                 Time/City: 10:00 PM 0
+                        Quilliam, Otto                      Warwick                 JFK Kennedy            Airline/Flight: Delta Air Lines DL0114                             2
+              D           Phone:
+                          +1 555-0100-000                                                                  Time/City: 10:25 PM Porto, Portugal (OPO)
+                        Quilliam, Greta                     Warwick                 JFK Kennedy            Airline/Flight: Delta Air Lines DL0114                             2
+              D           Phone:
+                          +1 555-0100-000                                                                  Time/City: 10:25 PM Porto, Portugal (OPO)
+
+Monday, July 6, 2026 2:57 PM                                                                                                                                        Page 1 of 2
+Assignment Details
+
+
+     Pickup:                                                               Baggage Claim
+                        Passenger                          Origin                  Destination            Information                                                 Bags
+                        Dunmore, Pia                       JFK Kennedy             Warwick                Airline/Flight: Finnair 15                                         1
+              A           Phone:
+                          +65 9628 7281                                                                   Time/City: 7:10 PM Helsinki
+                        Lindqvist, Pia                     JFK Kennedy             Warwick                Airline/Flight: Finnair 15                                         1
+              A           Phone:
+                          +65 9628 7281                                                                   Time/City: 7:10 PM Helsinki
+                        Jessop, Pia                        JFK Kennedy             Warwick                Airline/Flight: Finnair 15                                         1
+              A           Phone:
+                          +65 9628 7281                                                                   Time/City: 7:10 PM Helsinki
+
+ WRK                    ETA: 10:00 PM        ETD:                 Warwick | 1 Kings Drive
+     Drop-off :                                                            Warwick Main Lobby
+                        Passenger                          Origin                  Destination            Information                                                 Bags
+                        Dunmore, Pia                       JFK Kennedy             Warwick                Airline/Flight: Finnair 15                                         1
+              A           Phone:
+                          +65 9628 7281                                                                   Time/City: 7:10 PM Helsinki
+                        Lindqvist, Pia                     JFK Kennedy             Warwick                Airline/Flight: Finnair 15                                         1
+              A           Phone:
+                          +65 9628 7281                                                                   Time/City: 7:10 PM Helsinki
+                        Jessop, Pia                        JFK Kennedy             Warwick                Airline/Flight: Finnair 15                                         1
+              A           Phone:
+                          +65 9628 7281                                                                   Time/City: 7:10 PM Helsinki
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Monday, July 6, 2026 2:57 PM                                                                                                                                      Page 2 of 2

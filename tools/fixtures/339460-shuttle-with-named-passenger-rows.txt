@@ -1,0 +1,147 @@
+Assignment Details
+
+
+ Assignment number               339460                                              Driver                          Harkaway, Pia       
+ Start date and time             Tuesday, May 26, 2026 8:00 AM                       End date and time               Tuesday, May 26, 2026 9:50 AM
+ Vehicle                         Branch (72492) 2023 Mercedes Benz                   Parking space                   WRK-RPG-BSMNT-073
+                                 Sprinter 2500 (15 Seats)
+
+
+
+
+
+ Driver notes                    Please follow times:
+                                 7:45a Load Mail for ALL Sites check cabinets for Mail & WRK Lobby for Rushes
+                                 7:50a Call Dispatch & Load Passengers
+                                 8:00a Depart WRK Lobby for HUB
+                                 8:15a Depart TUX Lobby (only if passengers)
+                                 --
+                                 8:50a Exchange Mail check HUB Lobby for Rushes
+                                 8:55a Call Dispatch & Load Passengers
+                                 9:00a Depart from HUB for Home
+                                 9:45a Drop-Off TUX Passengers
+                                 9:55a Drop-Off WRK Passengers
+                                 10:00a Put Mail in INCOMING CABINET Bring Rushes labeled “Lobby” to WRK Lobby
+                                 10:00a Wash & Fuel
+
+
+ WRK                    ETA:                ETD: 8:00 AM        Warwick | 1 Kings Drive
+     Pickup:                                                             Warwick Main Lobby
+                        Passenger                         Origin                 Destination            Information                                          Bags
+                        Ellersby, Pia                     Warwick                Newburgh Center        Route: Warwick > Wallkill                                  0
+              S                                                                  B
+                         Phone:
+                         +82 10-9891-0419
+                         Notes: family member of Park, Hyun-jung, approved to stay as an overnight guest at Warwick Bethel
+              S         Lindqvist, Pia                    Warwick                Newburgh Center        Route: Warwick > Patterson
+                                                                                 B
+              S         Lindqvist, Ferris                 Warwick                Newburgh Center        Route: Warwick > Patterson
+                                                                                 B
+                        Thorncroft, Pia                   Warwick                Newburgh Center        Route: Warwick > Wallkill                                  1
+              S                                                                  B
+                         Phone:
+                         +82 10-9891-0419
+
+ TUX                    ETA: 8:10 AM        ETD: 8:10 AM        Tuxedo Property | 1422 Long Meadow Road Tuxedo Park , NY 10987
+
+ NCB                    ETA: 8:45 AM        ETD: 9:00 AM        Newburgh Center B | 15 Crossroads Court Newburgh, NY 12550
+     Drop-off :                                                          NCB   Main Lobby - 15 Crossroads Ct, Newburgh, NY
+                        Passenger                         Origin                 Destination            Information                                          Bags
+                        Ellersby, Pia                     Warwick                Newburgh Center        Route: Warwick > Wallkill                                  0
+              S                                                                  B
+                         Phone:
+                         +82 10-9891-0419
+                         Notes: family member of Park, Hyun-jung, approved to stay as an overnight guest at Warwick Bethel
+              S         Lindqvist, Pia                    Warwick                Newburgh Center        Route: Warwick > Patterson
+                                                                                 B
+              S         Lindqvist, Ferris                 Warwick                Newburgh Center        Route: Warwick > Patterson
+                                                                                 B
+                        Thorncroft, Pia                   Warwick                Newburgh Center        Route: Warwick > Wallkill                                  1
+              S                                                                  B
+                         Phone:
+                         +82 10-9891-0419
+     Pickup:                                                             NCB   Main Lobby - 15 Crossroads Ct, Newburgh, NY
+                        Passenger                         Origin                 Destination            Information                                          Bags
+              S         Alderton                          Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Attending Writing Department orientation in Warwick.
+              S         Marchetti, Alice                  Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+              S         Jessop, Hugo                      Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Group from Art Department attending MEPS Orientation in Warwick.
+
+Monday, May 25, 2026 5:22 PM                                                                                                                             Page 1 of 2
+Assignment Details
+
+
+              S         Harkaway, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Attending Writing Department orientation in Warwick.
+                        Norrington, Cleo                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +44 7904 644005
+                        Quilliam, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +44 7904 644005
+                        Marchetti, Pia                    Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +1 555-0100-000
+                        Marchetti, Esme                   Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +1 555-0100-000
+              S         Pemberton, Greta                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Attending Writing Department orientation in Warwick.
+                        Dunmore, Pia                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +1 555-0100-000
+
+ TUX                    ETA: 9:40 AM        ETD: 9:40 AM        Tuxedo Property | 1422 Long Meadow Road Tuxedo Park , NY 10987
+
+ WRK                    ETA: 9:50 AM        ETD:                Warwick | 1 Kings Drive
+     Drop-off :                                                          Warwick Main Lobby
+                        Passenger                         Origin                Destination            Information                                          Bags
+              S         Alderton                          Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Attending Writing Department orientation in Warwick.
+              S         Marchetti, Alice                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+              S         Jessop, Hugo                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Group from Art Department attending MEPS Orientation in Warwick.
+              S         Harkaway, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Attending Writing Department orientation in Warwick.
+                        Norrington, Cleo                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +44 7904 644005
+                        Quilliam, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +44 7904 644005
+                        Marchetti, Pia                    Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +1 555-0100-000
+                        Marchetti, Esme                   Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +1 555-0100-000
+              S         Pemberton, Greta                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                                                          B
+                         Notes: Attending Writing Department orientation in Warwick.
+                        Dunmore, Pia                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S                                           B
+                         Phone:
+                         +1 555-0100-000
+
+ (Unavailable)          5:00 PM                                 Midweek Meeting from 5/26/2026 5:00 PM to 5/26/2026 11:59 PM
+
+Monday, May 25, 2026 5:22 PM                                                                                                                            Page 2 of 2
