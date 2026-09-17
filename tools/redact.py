@@ -147,6 +147,8 @@ WANTED = {
     "361028": "date-rollover-disagrees-with-end",
     "356385": "non-flight-pickup-drop-off",
     "340343": "row-endpoints-beat-enclosing-stop",
+    "366824": "all-rows-excluded-must-still-appear",
+    "341156": "action-with-no-location",
     "339460": "shuttle-with-named-passenger-rows",
 }
 

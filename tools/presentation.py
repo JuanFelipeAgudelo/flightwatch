@@ -262,8 +262,12 @@ def render_itinerary(doc):
                 rows += (f'<div class="entity"><div class="erow"><span class="ename">'
                          f'{esc(e["label"])}</span><span class="eflight">{esc(e["flight"])}</span>'
                          f'</div><div class="estat">{esc(e["info"])}</div></div>')
+            # Dispatch really does leave the location blank -- 24 actions
+            # across the corpus. Saying so beats rendering an empty gap the
+            # driver has to interpret.
+            where = esc(act["where"]) if act["where"] else                 '<span style="color:var(--ink-dim);font-weight:400">location not given</span>'
             blocks += (f'<div class="action"><div><span class="averb">{esc(act["verb"])}</span> '
-                       f'<span class="awhere">{esc(act["where"])}</span></div>{rows}</div>')
+                       f'<span class="awhere">{where}</span></div>{rows}</div>')
         times = " – ".join(t for t in (stop.get("eta"), stop.get("etd")) if t) or ""
         cur = " current" if i == 0 else ""
         parts.append(f"""<div class="step{cur}">

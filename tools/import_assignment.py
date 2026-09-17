@@ -449,6 +449,20 @@ def party_label(names):
     return f"{surname}, {', '.join(givens[:-1])} & {givens[-1]}"
 
 
+SITE_CODE = re.compile(r"^[A-Z]{2,5}$")
+
+
+def place_code_of(stop):
+    """The drive-time key for a stop, or None when its label is free text.
+
+    28 of 186 assignments have a stop whose label is a name rather than a code
+    -- "Dispatch", "Enterprise Rent", and one PDF-spacing casualty that extracts
+    as "Dr y LGA, JFK &". Passing those through as a placeCode looks up nothing
+    and shows a truncated fragment where a site code belongs."""
+    label = (stop or {}).get("label") or ""
+    return label if SITE_CODE.match(label) else None
+
+
 def stop_for_line(doc, line_no):
     prev = [s for s in doc["stops"] if s["line"] < line_no]
     return prev[-1] if prev else (doc["stops"][0] if doc["stops"] else None)
@@ -511,7 +525,7 @@ def build_jobs(doc):
                     "kind": "appointment",
                     "targetTime": f"{date.isoformat()} {parse_tod(etd).strftime('%H:%M')}",
                     "place": (stop or {}).get("place"),
-                    "placeCode": (stop or {}).get("label"),
+                    "placeCode": place_code_of(stop),
                     "note": "Non-flight pickup",
                 })
                 key = ("appointment", job["targetTime"], row["name"], job.get("place"))
@@ -543,7 +557,7 @@ def build_jobs(doc):
                     "kind": "appointment",
                     "targetTime": f"{date.isoformat()} {tod.strftime('%H:%M')}",
                     "place": place,
-                    "placeCode": (stop or {}).get("label"),
+                    "placeCode": place_code_of(stop),
                     "note": f"Duration: {dur.group('dur').strip()}" if dur else None,
                 })
             else:  # shuttle -> a fixed-time job at the stop's ETD
@@ -557,7 +571,7 @@ def build_jobs(doc):
                     "kind": "appointment",
                     "targetTime": f"{date.isoformat()} {tod.strftime('%H:%M')}",
                     "place": (stop or {}).get("place"),
-                    "placeCode": (stop or {}).get("label"),
+                    "placeCode": place_code_of(stop),
                     "note": f"Shuttle: {rm.group('route').strip()}" if rm else "Shuttle",
                 })
             key = (job["kind"], job["targetTime"], row["name"], job.get("place"))
@@ -567,14 +581,22 @@ def build_jobs(doc):
         seen.add(key)
         jobs.append(job)
 
-    # No passenger rows at all -> the assignment itself is the job (shift).
-    if not jobs and not any(r["tag"] in EXCLUDED_TAGS for r in doc["rows"]):
+    # No jobs yet -> the assignment itself becomes one, so it still appears.
+    #
+    # This used to be skipped when every row was an excluded type, and the
+    # result was that an assignment made ENTIRELY of TD or HO rows produced
+    # nothing and vanished from the app completely. Real case: 366824 is a run
+    # to the German embassy -- leave Fishkill 8:00 AM, wait 10:45 to 1:00, back
+    # by 3:00 PM. A real day's work, and the driver would have opened Curbside
+    # to an empty screen. Showing the shape of the assignment with its rows
+    # named as unsupported is far better than showing nothing.
+    if not jobs:
         jobs.append({
             "kind": "shift",
             "targetTime": doc["start"].strftime("%Y-%m-%d %H:%M"),
             "endTime": doc["end"].strftime("%Y-%m-%d %H:%M"),
             "place": doc["stops"][0]["place"] if doc["stops"] else None,
-            "placeCode": doc["stops"][0]["label"] if doc["stops"] else None,
+            "placeCode": place_code_of(doc["stops"][0]) if doc["stops"] else None,
             "note": doc["driver_notes"],
             "passenger": None,
             "originCode": doc.get("origin"),

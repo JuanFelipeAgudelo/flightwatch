@@ -175,11 +175,35 @@ class Jobs(unittest.TestCase):
         self.assertEqual(jobs[0]["endTime"], "2026-09-16 17:00")
         self.assertEqual(issues, [])
 
-    def test_excluded_rows_are_named_not_miscounted_as_a_shift(self):
+    def test_excluded_rows_are_named(self):
         doc, jobs, issues = jobs_of("350568")
         self.assertTrue(any("excluded HO" in i for i in issues), issues)
-        self.assertFalse(any(j["kind"] == "shift" for j in jobs),
-                         "an assignment with HO rows is not a passenger-less shift")
+
+    def test_an_all_excluded_assignment_still_appears(self):
+        """366824 is a real run to the German embassy — out at 8:00 AM, back by
+        3:00 PM. Every row is HO, and excluding them used to produce NO jobs at
+        all, so the driver would have opened the app to an empty screen on a
+        working day. The assignment itself becomes the job, and the rows are
+        reported as unsupported rather than silently dropping the whole day."""
+        doc = fixture("366824") if any(n.startswith("366824") for n in os.listdir(FIXTURES)) else None
+        if doc is None:
+            self.skipTest("366824 fixture not generated")
+        jobs, issues = build_jobs(doc)
+        self.assertTrue(jobs, "an all-excluded assignment must still produce something")
+        self.assertEqual(jobs[0]["kind"], "shift")
+        self.assertTrue(any("excluded" in i for i in issues))
+
+    def test_free_text_stop_labels_are_not_drive_time_keys(self):
+        """28 assignments have a stop called "Dispatch" or "Enterprise Rent" —
+        and one that extracts as "Dr y LGA, JFK &" through a PDF spacing fault.
+        Used as a placeCode those look up nothing and put a fragment on screen
+        where a site code belongs."""
+        from import_assignment import place_code_of
+        self.assertIsNone(place_code_of({"label": "Enterprise Rent"}))
+        self.assertIsNone(place_code_of({"label": "Dr y LGA, JFK &"}))
+        self.assertIsNone(place_code_of({"label": "Dispatch"}))
+        self.assertEqual(place_code_of({"label": "WRK"}), "WRK")
+        self.assertEqual(place_code_of({"label": "EWR"}), "EWR")
 
     def test_non_flight_pickup_still_produces_a_job(self):
         """The passenger made their own way; the driver still makes the trip."""

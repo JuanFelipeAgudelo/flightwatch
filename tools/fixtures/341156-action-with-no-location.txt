@@ -1,0 +1,80 @@
+Assignment Details
+
+
+ Assignment number               341156                                               Driver                           Jonas, Ana           
+ Start date and time             Friday, May 8, 2026 10:15 AM                         End date and time                Friday, May 8, 2026 2:00 PM
+ Vehicle                         Branch (72560) 2023 Toyota Sienna (8                 Parking space                    WRK-RPG-BSMNT-065
+                                 Seats)
+
+
+
+
+
+ Driver notes                    Mario thank you for training Felipe on his first live EWR pickup.
+                                 EWR pick up and take to Enterprise, 180 Route 17 South, Mahwah, NJ 07430.
+
+
+ Assistant                         Role                               Notes
+ Agudelo, Juan Felipe
+
+
+ WRK                    ETA:                ETD: 10:15 AM        Warwick | 1 Kings Drive
+
+ EWR                    ETA: 11:30 AM       ETD: 12:30 PM        EWR Newark | Rt. 1 & 9 Newark , NJ 7114
+     Pickup:                                                              Baggage Claim
+                        Passenger                          Origin                 Destination            Information                                           Bags
+                        Cole, Rosa                         EWR Newark             Enterprise Rent A      Airline/Flight: United Airlines 1227                        1
+                                                                                  Car
+              A          Phone:
+                         +1 555-0100-000                                                                 Time/City: 11:47 AM MCO Orlando
+                                                                                                         International Airport
+                        Cole, Ivan                         EWR Newark             Enterprise Rent A      Airline/Flight: United Airlines 1227                        1
+                                                                                  Car
+              A          Phone:
+                                                                                                         Time/City: 11:47 AM MCO Orlando
+                                                                                                         International Airport
+
+ Enterprise Rent        ETA: 1:30 PM        ETD: 1:45 PM         Enterprise Rent A Car | 180 Route 17 South, Mahwah, NJ 07430
+ A Car
+     Drop-off :
+                        Passenger                          Origin                 Destination            Information                                           Bags
+                        Cole, Ivan                         EWR Newark             Enterprise Rent A      Airline/Flight: United Airlines 1227                        1
+                                                                                  Car
+              A          Phone:
+                                                                                                         Time/City: 11:47 AM MCO Orlando
+                                                                                                         International Airport
+     Drop-off :                                                           Warwick Main Lobby
+                        Passenger                          Origin                 Destination            Information                                           Bags
+                        Cole, Rosa                         EWR Newark             Enterprise Rent A      Airline/Flight: United Airlines 1227                        1
+                                                                                  Car
+              A          Phone:
+                         +1 555-0100-000                                                                 Time/City: 11:47 AM MCO Orlando
+                                                                                                         International Airport
+
+ WRK                    ETA: 2:00 PM        ETD:                 Warwick | 1 Kings Drive
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Thursday, May 7, 2026 4:47 PM                                                                                                                              Page 1 of 1
