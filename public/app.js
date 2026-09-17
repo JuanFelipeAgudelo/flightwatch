@@ -325,7 +325,13 @@ function leaveByFor(entry) {
   const target = targetFor(entry);
   if (!target || !target.local || !target.placeCode) return null;
 
-  const drive = settings.driveMinutes[target.placeCode];
+  // A job imported from an assignment knows where the driver actually starts
+  // (the parking site), so it carries its own drive time. The list-wide table
+  // is keyed by destination alone and so assumes one fixed origin — true for a
+  // job added by hand, wrong for a day that starts at a different site.
+  const drive = typeof entry.flight.driveMinutes === "number"
+    ? entry.flight.driveMinutes
+    : settings.driveMinutes[target.placeCode];
   if (typeof drive !== "number") return { unset: true, iata: target.placeCode };
 
   const wall = parseWall(target.local);
@@ -1324,27 +1330,36 @@ document.getElementById("buffer-input").addEventListener("change", (e) => {
 document.getElementById("copy-code").addEventListener("click", (e) => copyText(listCode, e.currentTarget));
 document.getElementById("copy-topic").addEventListener("click", (e) => copyText(ntfyTopic, e.currentTarget));
 
+/** Point the app at an existing list code. Returns false if the server doesn't
+ *  recognise it, and throws only if the server is unreachable. */
+async function adoptCode(trimmed) {
+  const res = await fetch(`${API_BASE}/api/flights?listCode=${encodeURIComponent(trimmed)}`);
+  if (!res.ok) return false;
+  listCode = trimmed;
+  localStorage.setItem(LS_LIST_CODE, listCode);
+  // Every piece of derived per-list state has to go, or the new list inherits
+  // the old one's. The acknowledged timestamp is the dangerous one: if it's
+  // newer than the new list's changes, its alerts are silently suppressed.
+  localStorage.removeItem(LS_ACKED);
+  prevValues.clear();
+  reloadedFor.clear();
+  detailKey = null;
+  lastHistory = null;
+  closeSheet("detail-sheet");
+  applyPayload(await res.json());
+  renderHome();
+  syncSettingsSheet();
+  return true;
+}
+
 document.getElementById("switch-code").addEventListener("click", async () => {
   const code = window.prompt("Enter the list code to switch to:");
   if (!code) return;
   const trimmed = code.trim();
   try {
-    const res = await fetch(`${API_BASE}/api/flights?listCode=${encodeURIComponent(trimmed)}`);
-    if (!res.ok) { window.alert("That code isn't recognised — check it and try again."); return; }
-    listCode = trimmed;
-    localStorage.setItem(LS_LIST_CODE, listCode);
-    // Every piece of derived per-list state has to go, or the new list inherits
-    // the old one's. The acknowledged timestamp is the dangerous one: if it's
-    // newer than the new list's changes, its alerts are silently suppressed.
-    localStorage.removeItem(LS_ACKED);
-    prevValues.clear();
-    reloadedFor.clear();
-    detailKey = null;
-    lastHistory = null;
-    closeSheet("detail-sheet");
-    applyPayload(await res.json());
-    renderHome();
-    syncSettingsSheet();
+    if (!(await adoptCode(trimmed))) {
+      window.alert("That code isn't recognised — check it and try again.");
+    }
   } catch (err) {
     console.error(err);
     window.alert("Couldn't reach the server. Try again.");
@@ -1529,16 +1544,70 @@ function tickClock() {
 
 /* ================= INIT ================= */
 
+/**
+ * First run, with no code stored. Registering one silently is what filled the
+ * namespace with orphan lists: a new browser, a private window or cleared site
+ * data all look exactly like a new user, so the app quietly minted a fresh
+ * empty list while the real one stayed on the server, unreachable. The code is
+ * the only way back and there is no recovery, so creating a list is now a
+ * deliberate act with the recovery path sitting right next to it.
+ */
+function renderWelcome() {
+  main.innerHTML = `
+    <div class="welcome">
+      <span class="eyebrow">FIRST RUN</span>
+      <h2>Do you already have a list code?</h2>
+      <p class="welcome-note">Your code is the only way back to your jobs. If you have one
+      from another device, enter it here &mdash; starting a new list will not find it.</p>
+      <div class="field">
+        <label for="w-code">LIST CODE</label>
+        <input class="input" id="w-code" placeholder="3226928c" autocomplete="off"
+               autocapitalize="off" spellcheck="false" />
+      </div>
+      <p class="field-error" id="w-error"></p>
+      <button class="submit" id="w-use" type="button">USE THIS CODE</button>
+      <button class="mini-btn welcome-new" id="w-new" type="button">START A NEW LIST</button>
+    </div>`;
+
+  const errorEl = document.getElementById("w-error");
+  const input = document.getElementById("w-code");
+
+  document.getElementById("w-use").addEventListener("click", async () => {
+    const trimmed = input.value.trim();
+    if (!trimmed) { errorEl.textContent = "Enter a code, or start a new list."; return; }
+    errorEl.textContent = "";
+    try {
+      if (await adoptCode(trimmed)) return;
+      errorEl.textContent = "That code isn't recognised — check it and try again.";
+    } catch (err) {
+      console.error(err);
+      errorEl.textContent = "Couldn't reach the server. Try again.";
+    }
+  });
+
+  document.getElementById("w-new").addEventListener("click", async () => {
+    errorEl.textContent = "";
+    if (!(await ensureList())) {
+      errorEl.textContent = "Couldn't set up a list. Check your connection and try again.";
+      return;
+    }
+    await loadFlights();
+    syncSettingsSheet();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("w-use").click();
+  });
+}
+
 (async function init() {
   app.dataset.density = density;
   applyDensity(density);
   setThemeMode(themeMode);
   tickClock();
 
-  const ok = await ensureList();
-  if (!ok) {
-    main.innerHTML = `<div class="warn-strip">${icon("triangle-alert")}
-      <span>Couldn't set up your list. Check your connection and reload.</span></div>`;
+  if (!listCode) {
+    renderWelcome();
     return;
   }
   await loadFlights();

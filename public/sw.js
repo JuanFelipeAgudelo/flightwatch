@@ -1,6 +1,6 @@
 // Minimal service worker so the app is installable and survives losing signal.
 // No push handling here — notifications come from ntfy's own app, not this worker.
-const CACHE_NAME = "flightwatch-v14";
+const CACHE_NAME = "flightwatch-v15";
 
 // Precached so the offline state has a shell to render.
 const CORE_ASSETS = [

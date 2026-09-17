@@ -487,6 +487,21 @@
     [data-theme="day"] .input[type="date"] { color-scheme: light; }
     textarea.input { min-height: 48px; resize: vertical; }
     .field-error { font-size: 11.5px; color: var(--alert-text); min-height: 1em; }
+    /* First-run panel. Creating a list is deliberate here, so the recovery
+       path (entering an existing code) is the primary action and starting
+       fresh is the quieter one. */
+    .welcome {
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 22px 18px 26px; max-width: 420px; margin: 0 auto;
+    }
+    .welcome h2 {
+      margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em;
+      color: var(--ink); text-wrap: balance;
+    }
+    .welcome-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+    .welcome .submit { margin-top: 6px; }
+    .welcome-new { align-self: center; margin-top: 2px; }
+
     .submit {
       height: 48px; width: 100%; border: 0; border-radius: 4px;
       background: var(--brass-fill); color: var(--brass-ink);
