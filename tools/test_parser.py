@@ -188,6 +188,31 @@ class Assignments(unittest.TestCase):
                     self.assertTrue(e.get("scheduledText"),
                                     f"{e['name']} lost its scheduled time")
 
+    def test_a_flight_resolves_to_exactly_one_date(self):
+        """A passenger appears at TWO steps — the airport and their own door —
+        and once those fall on different days, keying a flight on the enclosing
+        step tracked the same flight twice, on two dates, with half of it never
+        resolving. Seen in production: poll:UA1503:2026-08-31 AND
+        poll:UA1503:2026-09-01 for one arrival."""
+        a = build_assignment(fixture("369736"))
+        dates = {}
+        for step in a["steps"]:
+            for act in step["actions"]:
+                for e in act["entities"]:
+                    if e.get("flightNumber"):
+                        dates.setdefault(e["flightNumber"], set()).add(e.get("flightDate"))
+        self.assertTrue(dates)
+        for number, seen in dates.items():
+            with self.subTest(number):
+                self.assertEqual(len(seen), 1, f"{number} resolved to {seen}")
+
+    def test_an_arrival_is_dated_by_when_the_plane_lands(self):
+        a = build_assignment(fixture("369736"))
+        e = next(e for s in a["steps"] for act in s["actions"]
+                 for e in act["entities"] if e.get("flightNumber") == "UA1503")
+        # LGA's eta is 11:00 PM on the 31st; its etd rolls to the 1st.
+        self.assertEqual(e["flightDate"], "2026-08-31")
+
     def test_the_header_fields_real_data_added(self):
         a = build_assignment(fixture("369736"))
         self.assertIn("Sienna", a["vehicle"])

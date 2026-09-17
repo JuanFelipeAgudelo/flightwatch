@@ -771,6 +771,29 @@ def parse_assistants(doc):
     return out
 
 
+def flight_date_for(doc, steps, entity, origin_col, dest_col):
+    """The date the flight itself operates.
+
+    A passenger appears at TWO steps -- the airport and their own door -- and
+    once those steps can fall on different days, keying a flight on "whichever
+    step I am looking at" tracks the same flight twice, on two dates, with half
+    of it never resolving. The flight belongs to the AIRPORT step:
+
+      arrival    the passenger comes FROM the airport, so it is their origin
+      departure  the passenger goes TO the airport, so it is their destination
+
+    An arrival uses that step's etaDate (when the plane lands) and a departure
+    its etd date (when it leaves)."""
+    tag = entity.get("tag") or ""
+    arriving = tag in ("A", "GBA")
+    wanted = code_for_place(doc, origin_col if arriving else dest_col)
+    if wanted:
+        for step in steps:
+            if step["code"] == wanted:
+                return step["etaDate"] if arriving else step["date"]
+    return None
+
+
 def build_assignment(doc):
     """The full four-level record: Assignment -> Step -> Action -> Entity.
 
@@ -869,6 +892,19 @@ def build_assignment(doc):
     if not doc["date_ok"]:
         issues.append("last stop date disagrees with the document's stated end date "
                       "-- check the multi-day rollover")
+
+    # Second pass: now that every step has a resolved date, pin each flight to
+    # the step it actually operates at. Done here rather than in the Worker
+    # because this is where the origin/destination columns and the step codes
+    # are both in hand.
+    for step in steps:
+        for act in step["actions"]:
+            for ent in act["entities"]:
+                if not ent.get("flightNumber"):
+                    continue
+                ent["flightDate"] = flight_date_for(
+                    doc, steps, ent, ent.get("origin"), ent.get("destination")
+                ) or step["etaDate"]
 
     gb = any(e.get("gb") for s in steps for a in s["actions"] for e in a["entities"])
     return {
