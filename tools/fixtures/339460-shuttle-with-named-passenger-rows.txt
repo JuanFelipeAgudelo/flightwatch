@@ -1,7 +1,7 @@
 Assignment Details
 
 
- Assignment number               339460                                              Driver                          Harkaway, Pia       
+ Assignment number               339460                                              Driver                          Reyes, Mara         
  Start date and time             Tuesday, May 26, 2026 8:00 AM                       End date and time               Tuesday, May 26, 2026 9:50 AM
  Vehicle                         Branch (72492) 2023 Mercedes Benz                   Parking space                   WRK-RPG-BSMNT-073
                                  Sprinter 2500 (15 Seats)
@@ -28,16 +28,16 @@ Assignment Details
  WRK                    ETA:                ETD: 8:00 AM        Warwick | 1 Kings Drive
      Pickup:                                                             Warwick Main Lobby
                         Passenger                         Origin                 Destination            Information                                          Bags
-                        Ellersby, Pia                     Warwick                Newburgh Center        Route: Warwick > Wallkill                                  0
+                        Mendez, Pia                       Warwick                Newburgh Center        Route: Warwick > Wallkill                                  0
               S                                                                  B
                          Phone:
                          +82 10-9891-0419
                          Notes: family member of Park, Hyun-jung, approved to stay as an overnight guest at Warwick Bethel
-              S         Lindqvist, Pia                    Warwick                Newburgh Center        Route: Warwick > Patterson
+              S         Reyes, Vera                       Warwick                Newburgh Center        Route: Warwick > Patterson
                                                                                  B
-              S         Lindqvist, Ferris                 Warwick                Newburgh Center        Route: Warwick > Patterson
+              S         Reyes, Faye                       Warwick                Newburgh Center        Route: Warwick > Patterson
                                                                                  B
-                        Thorncroft, Pia                   Warwick                Newburgh Center        Route: Warwick > Wallkill                                  1
+                        Jonas, Ana                        Warwick                Newburgh Center        Route: Warwick > Wallkill                                  1
               S                                                                  B
                          Phone:
                          +82 10-9891-0419
@@ -47,27 +47,27 @@ Assignment Details
  NCB                    ETA: 8:45 AM        ETD: 9:00 AM        Newburgh Center B | 15 Crossroads Court Newburgh, NY 12550
      Drop-off :                                                          NCB   Main Lobby - 15 Crossroads Ct, Newburgh, NY
                         Passenger                         Origin                 Destination            Information                                          Bags
-                        Ellersby, Pia                     Warwick                Newburgh Center        Route: Warwick > Wallkill                                  0
+                        Mendez, Pia                       Warwick                Newburgh Center        Route: Warwick > Wallkill                                  0
               S                                                                  B
                          Phone:
                          +82 10-9891-0419
                          Notes: family member of Park, Hyun-jung, approved to stay as an overnight guest at Warwick Bethel
-              S         Lindqvist, Pia                    Warwick                Newburgh Center        Route: Warwick > Patterson
+              S         Reyes, Vera                       Warwick                Newburgh Center        Route: Warwick > Patterson
                                                                                  B
-              S         Lindqvist, Ferris                 Warwick                Newburgh Center        Route: Warwick > Patterson
+              S         Reyes, Faye                       Warwick                Newburgh Center        Route: Warwick > Patterson
                                                                                  B
-                        Thorncroft, Pia                   Warwick                Newburgh Center        Route: Warwick > Wallkill                                  1
+                        Jonas, Ana                        Warwick                Newburgh Center        Route: Warwick > Wallkill                                  1
               S                                                                  B
                          Phone:
                          +82 10-9891-0419
      Pickup:                                                             NCB   Main Lobby - 15 Crossroads Ct, Newburgh, NY
                         Passenger                         Origin                 Destination            Information                                          Bags
-              S         Alderton                          Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
+              S         Jonas, Gil                        Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Attending Writing Department orientation in Warwick.
-              S         Marchetti, Alice                  Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
+              S         Diaz, Vera                        Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
                                                           B
-              S         Jessop, Hugo                      Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
+              S         Lucas, Leon                       Newburgh Center        Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Group from Art Department attending MEPS Orientation in Warwick.
 
@@ -75,29 +75,29 @@ Monday, May 25, 2026 5:22 PM                                                    
 Assignment Details
 
 
-              S         Harkaway, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Brennan, Vera                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Attending Writing Department orientation in Warwick.
-                        Norrington, Cleo                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Lucas, Kira                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +44 7904 644005
-                        Quilliam, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Lucas, Pia                        Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +44 7904 644005
-                        Marchetti, Pia                    Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Grant, Omar                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +1 555-0100-000
-                        Marchetti, Esme                   Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Grant, Rosa                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +1 555-0100-000
-              S         Pemberton, Greta                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Hale, Ben                         Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Attending Writing Department orientation in Warwick.
-                        Dunmore, Pia                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Warner, Theo                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +1 555-0100-000
@@ -107,37 +107,37 @@ Assignment Details
  WRK                    ETA: 9:50 AM        ETD:                Warwick | 1 Kings Drive
      Drop-off :                                                          Warwick Main Lobby
                         Passenger                         Origin                Destination            Information                                          Bags
-              S         Alderton                          Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Jonas, Gil                        Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Attending Writing Department orientation in Warwick.
-              S         Marchetti, Alice                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Diaz, Vera                        Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
-              S         Jessop, Hugo                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Lucas, Leon                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Group from Art Department attending MEPS Orientation in Warwick.
-              S         Harkaway, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Brennan, Vera                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Attending Writing Department orientation in Warwick.
-                        Norrington, Cleo                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Lucas, Kira                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +44 7904 644005
-                        Quilliam, Pia                     Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Lucas, Pia                        Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +44 7904 644005
-                        Marchetti, Pia                    Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Grant, Omar                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +1 555-0100-000
-                        Marchetti, Esme                   Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Grant, Rosa                       Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +1 555-0100-000
-              S         Pemberton, Greta                  Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+              S         Hale, Ben                         Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
                                                           B
                          Notes: Attending Writing Department orientation in Warwick.
-                        Dunmore, Pia                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
+                        Warner, Theo                      Newburgh Center       Warwick                Route: Patterson > Warwick                                 0
               S                                           B
                          Phone:
                          +1 555-0100-000

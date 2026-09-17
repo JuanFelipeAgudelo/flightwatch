@@ -1,7 +1,7 @@
 Assignment Details
 
 
- Assignment number                348400                                               Driver                           Harkaway, Pia       
+ Assignment number                348400                                               Driver                           Reyes, Mara         
  Start date and time              Friday, June 5, 2026 8:45 AM                         End date and time                Friday, June 5, 2026 4:00 PM
  Vehicle                          Branch (72560) 2023 Toyota Sienna (8                 Parking space                    WRK-RPG-BSMNT-065
                                   Seats)
@@ -20,11 +20,11 @@ Assignment Details
  WKL                    ETA: 10:00 AM        ETD: 10:00 AM        Wallkill | 900 Red Mills Rd.
      Pickup:                                                               F Res
                         Passenger                          Origin                  Destination            Information                                           Bags
-                        Quilliam, Pia                      Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
+                        Ford, Dana                         Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
               D          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:55 PM MSP - Minneapolis/St.
                                                                                                           Paul
-                        Quilliam, Pia                      Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
+                        Ford, Omar                         Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
               D          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:55 PM MSP - Minneapolis/St.
                                                                                                           Paul
@@ -32,50 +32,50 @@ Assignment Details
  EWR                    ETA: 12:30 PM        ETD: 2:45 PM         EWR Newark | Rt. 1 & 9 Newark , NJ 7114
      Drop-off :                                                            Departure Terminal
                         Passenger                          Origin                  Destination            Information                                           Bags
-                        Quilliam, Pia                      Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
+                        Ford, Dana                         Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
               D          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:55 PM MSP - Minneapolis/St.
                                                                                                           Paul
-                        Quilliam, Pia                      Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
+                        Ford, Omar                         Wallkill                EWR Newark             Airline/Flight: United Airlines UA 1068                      2
               D          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:55 PM MSP - Minneapolis/St.
                                                                                                           Paul
      Pickup:                                                               Customs Exit
                         Passenger                          Origin                  Destination            Information                                           Bags
-                        Glanville, Esme                    EWR Newark              Warwick                Airline/Flight: United Airlines SN8807 or                    2
+                        Sandoval, Noor                     EWR Newark              Warwick                Airline/Flight: United Airlines SN8807 or                    2
               A                                                                                           UA995
                          Phone:
                          +33 6 34 32 95 82                                                                Time/City: 1:10 PM Brussels
-                        Glanville, Ulrike                  EWR Newark              Warwick                Airline/Flight: United Airlines SN8807 or                    2
+                        Sandoval, Vera                     EWR Newark              Warwick                Airline/Flight: United Airlines SN8807 or                    2
               A                                                                                           UA995
                          Phone:
                          +33 6 34 32 95 82                                                                Time/City: 1:10 PM Brussels
-                        Alderton, Ines                     EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
+                        Vargas, Rosa                       EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
               A          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:40 PM FRA
-                        Dunmore, Pia                       EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
+                        Vargas, Eli                        EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
               A          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:40 PM FRA
 
  WRK                    ETA: 4:00 PM         ETD:                 Warwick | 1 Kings Drive
      Drop-off :                                                            A-res WRK
                         Passenger                          Origin                  Destination            Information                                           Bags
-                        Alderton, Ines                     EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
+                        Vargas, Rosa                       EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
               A          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:40 PM FRA
-                        Dunmore, Pia                       EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
+                        Vargas, Eli                        EWR Newark              Warwick                Airline/Flight: Lufthansa LH7603                             1
               A          Phone:
                          +1 555-0100-000                                                                  Time/City: 1:40 PM FRA
      Drop-off :                                                            Warwick Main Lobby
                         Passenger                          Origin                  Destination            Information                                           Bags
-              A         Glanville, Esme                    EWR Newark              Warwick                Airline/Flight: United Airlines SN8807 or                    2
+              A         Sandoval, Noor                     EWR Newark              Warwick                Airline/Flight: United Airlines SN8807 or                    2
                                                                                                           UA995
 
 Thursday, June 4, 2026 5:17 PM                                                                                                                              Page 1 of 2
 Assignment Details
 
 
-                       Glanville, Ulrike                 EWR Newark            Warwick               Airline/Flight: United Airlines SN8807 or                 2
+                       Sandoval, Vera                    EWR Newark            Warwick               Airline/Flight: United Airlines SN8807 or                 2
               A                                                                                      UA995
                         Phone:
                         +33 6 34 32 95 82                                                            Time/City: 1:10 PM Brussels

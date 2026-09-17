@@ -1,7 +1,7 @@
 Assignment Details
 
 
- Assignment number                353328                                                Driver                           Harkaway, Pia       
+ Assignment number                353328                                                Driver                           Reyes, Mara         
  Start date and time              Friday, July 3, 2026 10:30 AM                         End date and time                Friday, July 3, 2026 12:00 PM
  Vehicle                                                                                Parking space
 
@@ -16,7 +16,7 @@ Assignment Details
 
 
  Assistant                          Role                               Notes
- Jessop, Pia                        Helper                             Trainee
+ Novak, Jude                        Helper                             Trainee
 
 
  WRK                    ETA: 10:30 AM        ETD: 12:00 PM        Warwick | 1 Kings Drive

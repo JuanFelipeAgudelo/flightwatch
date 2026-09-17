@@ -42,13 +42,18 @@ FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 # Stable fake identities. Same input always yields the same fake, so a
 # regenerated fixture set produces a clean diff rather than noise.
-SURNAMES = ["Alderton", "Brightwell", "Castellan", "Dunmore", "Ellersby",
-            "Fairweather", "Glanville", "Harkaway", "Illingworth", "Jessop",
-            "Kettleby", "Lindqvist", "Marchetti", "Norrington", "Ostrowski",
-            "Pemberton", "Quilliam", "Ravensworth", "Stallybrass", "Thorncroft"]
-GIVENS = ["Alice", "Bruno", "Cleo", "Dmitri", "Esme", "Ferris", "Greta",
-          "Hugo", "Ines", "Jonas", "Kira", "Lucian", "Mira", "Nadia",
-          "Otto", "Pia", "Rafael", "Saskia", "Tomas", "Ulrike"]
+# Ordinary surnames and given names, deliberately unremarkable. An earlier pool
+# (Stallybrass, Ravensworth, Thorncroft) read as invented, which snags the eye
+# in a fixture diff and looks wrong if a screen is ever shown to anyone. Short
+# entries come first so a narrow cell still gets a whole name rather than a
+# truncated one.
+SURNAMES = ["Best", "Cole", "Diaz", "Ford", "Grant", "Hale", "Ibarra", "Jonas",
+            "Keller", "Lucas", "Mendez", "Novak", "Owens", "Pratt", "Quinn",
+            "Reyes", "Sutton", "Tanaka", "Vargas", "Warner", "Alvarez",
+            "Brennan", "Okafor", "Whitaker", "Sandoval", "Donnelly"]
+GIVENS = ["Ana", "Ben", "Cruz", "Dana", "Eli", "Faye", "Gil", "Hana", "Ivan",
+          "Jude", "Kira", "Leon", "Mara", "Nils", "Omar", "Pia", "Rosa",
+          "Sam", "Tess", "Vera", "Marcus", "Daniela", "Theo", "Noor"]
 
 
 def _pick(pool, seed):
