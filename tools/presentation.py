@@ -29,9 +29,9 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from import_assignment import (  # noqa: E402
-    APPT_RE, ARRIVAL_TIME_RE, EXCLUDED_TAGS, FLIGHT_RE, KIND_FOR_TAG, ROUTE_RE,
-    TIME_CITY_RE, code_for_place, drive_for, parse_assignment, parse_flight,
-    parse_tod, row_endpoints, stop_for_line,
+    ACTION_LINE, APPT_RE, ARRIVAL_TIME_RE, EXCLUDED_TAGS, FLIGHT_RE, ROUTE_RE,
+    TIME_CITY_RE, dropoff_points, parse_assignment, parse_flight, party_key,
+    party_label,
 )
 
 E = html.escape
@@ -41,43 +41,14 @@ def esc(v):
     return E(str(v)) if v is not None else ""
 
 
-# --------------------------------------------------------------- party rules
-def party_key(doc, row):
-    """Same surname + same flight + same ACTION. All three, or it is not a
-    party: two passengers off one flight can be dropped at different doors, and
-    merging those would send the driver to the wrong one."""
-    name = row.get("name") or ""
-    surname = name.split(",")[0].strip() if "," in name else name
-    fm = FLIGHT_RE.search(row["raw"])
-    flight = fm.group("rest").strip()[:40] if fm else ""
-    stop = stop_for_line(doc, row["line"])
-    return (surname, flight, (stop or {}).get("label"), row.get("tag"))
-
-
-def given_of(name):
-    return name.split(",", 1)[1].strip() if "," in name else ""
-
-
-def party_label(names):
-    """'Boeck, Christian & Heidi' -- one row, because it is one pickup."""
-    first = names[0]
-    surname = first.split(",")[0].strip() if "," in first else first
-    givens = [g for g in (given_of(n) for n in names) if g]
-    if not givens:
-        return surname
-    if len(givens) == 1:
-        return f"{surname}, {givens[0]}"
-    return f"{surname}, {' & '.join(givens[:-1])} & {givens[-1]}" if len(givens) > 2 \
-        else f"{surname}, {givens[0]} & {givens[1]}"
-
-
 def entities_between(doc, start_line, end_line):
     """Passenger rows in a line range, collapsed into parties."""
     rows = [r for r in doc["rows"]
             if start_line < r["line"] < end_line and r.get("name")]
+    doors = dropoff_points(doc)
     groups = defaultdict(list)
     for r in rows:
-        groups[party_key(doc, r)].append(r)
+        groups[party_key(doc, r, doors)].append(r)
     out = []
     for key, members in groups.items():
         names, seen = [], set()
@@ -107,12 +78,6 @@ def entities_between(doc, start_line, end_line):
             "excluded": EXCLUDED_TAGS.get(tag),
         })
     return out
-
-
-# "     Drop-off :          A Front" -- layout mode puts a SPACE before the
-# colon, so a startswith("Drop-off:") test silently finds nothing and every
-# drop-off disappears from the itinerary.
-ACTION_LINE = re.compile(r"^\s*(Pickup|Drop-off)\s*:\s*(?P<where>.*?)\s*$")
 
 
 def actions_for_step(doc, stop, next_line):

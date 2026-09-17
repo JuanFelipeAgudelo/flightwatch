@@ -378,6 +378,77 @@ def code_for_place(doc, name):
     return head if re.fullmatch(r"[A-Z]{3}", head) else None
 
 
+# "     Drop-off :          A Front" -- layout mode puts a SPACE before the
+# colon, so a startswith("Drop-off:") test matches nothing and every drop-off
+# silently disappears.
+ACTION_LINE = re.compile(r"^\s*(Pickup|Drop-off)\s*:\s*(?P<where>.*?)\s*$")
+
+
+def actions_in(doc):
+    """Every action bar in the document, as (line, verb, where)."""
+    out = []
+    for i, line in enumerate(doc["lines"]):
+        m = ACTION_LINE.match(line)
+        if m:
+            out.append((i, m.group(1).upper(), (m.group("where") or "").strip()))
+    return out
+
+
+def dropoff_points(doc):
+    """passenger name -> the drop-off point their row sits under.
+
+    Each passenger can be set down somewhere different, even off the same
+    flight: assignment 369736 drops one at A Front and one at B Carport."""
+    acts = actions_in(doc)
+    out = {}
+    for row in doc["rows"]:
+        name = row.get("name")
+        if not name:
+            continue
+        prior = [a for a in acts if a[0] < row["line"]]
+        if not prior:
+            continue
+        _line, verb, where = prior[-1]
+        if verb == "DROP-OFF" and where:
+            out.setdefault(name, where)
+    return out
+
+
+def party_key(doc, row, dropoffs=None):
+    """What makes two rows the same party: **same surname, same flight, same
+    drop-off point.**
+
+    Half the passenger groups in the sample are parties rather than
+    individuals -- 103 of 203, all travelling on the same flight -- so without
+    grouping, a couple is two near-identical rows differing only in a given
+    name.
+
+    The drop-off point is the test that keeps it honest. Across 88 same-surname
+    same-flight groups with a known door, every one went to the same door, so
+    the rule costs nothing today. But the owner confirms a passenger can be set
+    down somewhere of their own, and merging two people who part at the kerb
+    would send the driver to one door with someone who belongs at another."""
+    name = row.get("name") or ""
+    surname = name.split(",")[0].strip() if "," in name else name
+    fm = FLIGHT_RE.search(row["raw"])
+    flight = fm.group("rest").strip()[:40] if fm else ""
+    door = (dropoffs or {}).get(name)
+    return (surname, flight, door)
+
+
+def party_label(names):
+    """'Boeck, Christian & Heidi' -- one row, because it is one pickup."""
+    first = names[0]
+    surname = first.split(",")[0].strip() if "," in first else first
+    givens = [n.split(",", 1)[1].strip() for n in names if "," in n]
+    givens = [g for g in givens if g]
+    if not givens:
+        return surname
+    if len(givens) == 1:
+        return f"{surname}, {givens[0]}"
+    return f"{surname}, {', '.join(givens[:-1])} & {givens[-1]}"
+
+
 def stop_for_line(doc, line_no):
     prev = [s for s in doc["stops"] if s["line"] < line_no]
     return prev[-1] if prev else (doc["stops"][0] if doc["stops"] else None)
