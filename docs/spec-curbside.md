@@ -82,7 +82,14 @@ in the sample, and Warwick→EWR is 75 minutes where Fishkill→EWR is 90.
 
 Re-sends replace the whole record; there is no diff marker (Phase 0). So:
 
-- Imports are **whole-record replace**, latest wins by the page-footer timestamp.
+- **Identity is the assignment number.** The same number updates the assignment
+  in place; a different number is a new assignment. The owner's rule, and the
+  document's own: the helper receives the same run under the same number, so
+  `driver` is not part of identity.
+- Imports are **whole-record replace**, latest wins by the page-footer
+  timestamp — **not** by the order copies arrive. Re-sends do not always reach
+  the driver in order, and the footer is the only reliable clock in the
+  document.
 - Manual edits live in an **ordered patch log**, reapplied after each import —
   never merged into the record. Without this, a new email silently eats a
   driver's correction.
@@ -162,30 +169,71 @@ So: the full assignment must be readable offline, and step taps and edits must b
 
 ## Phases
 
-| Phase | What | Why this order |
+Revised 2026-09-17, after Phase 4 and a day of testing against real assignments.
+What changed and why is recorded below the table, because the reasons matter
+more than the order.
+
+| Phase | What | Status |
 |---|---|---|
-| **4** | Redacted fixtures + parser test suite | Everything after is riskier without it |
-| **5** | Assignment model end-to-end (Worker + Python importer emits the full hierarchy) | Extraction is already proven — the cheap half |
-| **6** | Assignments list + itinerary UI | The visible payoff |
-| **7** | Manual create/edit of steps and children, with undo | Makes the parser's gaps survivable |
-| **8** | Self-serve upload — parser ported to JS, parsed in the browser | Only worth it once 5–7 are solid |
-| **9** | Update + "this changed", on the edit overlay | Needs 7 to exist |
-| **10** | Notes timeline — the 124 timed lines | Pure addition, safe late |
-| later | Auth, replace the shared poll array, dispatch view | Gate on real users, not on one |
+| **4** | Redacted fixtures + parser regression suite | **done** — 15 fixtures, 44 tests |
+| **5** | Assignment model and storage. Identity is the assignment number; the same number replaces, a new number is a new assignment | next |
+| **6** | Assignments list + itinerary UI, including the GB marking and Right&nbsp;Now | |
+| **7** | Manual create and edit of steps and children, with undo and the edit overlay | |
+| **8** | Offline: the full assignment readable, step taps and edits queued | |
+| **9** | Notification rewrite — verb first, early arrivals urgent | *can jump the queue* |
+| **10** | Archive at 10h, delete at the chosen retention | |
+| **11** | Notes timeline — the 124 timed lines | |
+| **12** | `TD` and `HO` support, retiring the exclusion | |
+| scale | Auth, then self-serve upload, then a dispatch view | gate on a second user |
 
-Phases 4–7 give a working personal app. 8–10 make it something you could hand to
-another driver. The "later" row is what stands between that and 150 people.
+Phases 5–8 give a personal app worth using every day. 9–12 are additions, each
+safe to do alone. The scale row is what stands between that and other drivers.
 
-### Why fixtures come first
+### Five changes from the first plan
 
-Everything so far has shipped on manual verification. That has caught real bugs —
-and it *missed* the truncated driver notes, the parking-space capture and the
-double-counted passenger rows until someone happened to look. At four nested
-levels with manual editing on top, that stops being good enough.
+**Update-on-same-number moved from Phase 9 into Phase 5.** It was listed as a
+later refinement. It is not — it is a property of *storage identity*, and
+without it the app fills with duplicates from the first week, because re-sends
+are routine. What genuinely belongs later is the *visible* "this changed" diff,
+which needs the edit overlay to exist first.
 
-The 186 real PDFs are ideal fixtures and cannot be committed: they carry
-passenger names, mobile numbers and hospital destinations. **Redacted fixtures,
-generated from the real ones, are the deliverable.**
+**Self-serve upload moved out of the numbered phases entirely.** Porting the
+parser to JavaScript is the single biggest chunk of work in this plan, and it
+buys nothing for one driver: handing PDFs over in a session already works. It is
+a scaling feature, so it now sits in the scale row behind auth.
+
+**Offline is promoted to a phase of its own.** It was written down as a
+"data-layer constraint", which is a good way for something to never get built.
+The driver is in an LGA baggage hall with one bar; an assignment app that cannot
+show the next stop is useless exactly then.
+
+**The notification rewrite is new.** It was designed and then not planned. It is
+independent of everything else and cheap, so it can be pulled forward whenever —
+and it is the only screen read *without opening the app*.
+
+**Archive, retention and `TD`/`HO` are now listed.** All three were agreed and
+then lived only in prose. `TD`/`HO` became cheaper once an all-excluded
+assignment stopped vanishing: the shape is already on screen, so supporting the
+rows is an addition rather than a rescue.
+
+### What Phase 5 carries that the first plan did not
+
+Real data added five fields the original model had nowhere to put:
+
+- **vehicle** — id and make/model, in 183 of 186 assignments
+- **parking site** — the three-letter prefix, which is where the day starts
+- **assistants** — name, role and note, in 48 of 186 (Helper 13, Trainer 10)
+- **per-passenger notes** — 76 of them, and they change the work
+  (*"I will be bringing a small cart with me"*, *"Cell is WhatsApp#"*)
+- **party grouping** — half the passenger groups are parties, not individuals
+
+Plus a **GB flag**, since `GBA`/`GBD` is 20% of passenger rows and changes both
+the marking and the combining rules.
+
+Drive time no longer needs a table lookup at import: the gap between one stop's
+ETD and the next stop's ETA is dispatch's own planned leg, and 209 of 209 flight
+jobs take it from the document. The derived table survives only for jobs typed
+in by hand.
 
 ## Parsing decisions
 
