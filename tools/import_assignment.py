@@ -147,12 +147,16 @@ STOP_RE = re.compile(
 TAGS = ("GBA", "GBD", "MED", "HO", "TD", "A", "D", "S")
 TAG_RE = re.compile(r"(?:^|\s{2,})(" + "|".join(TAGS) + r")(?=\s|$)")
 
-TIME_CITY_RE = re.compile(r"Time/City:\s*(?P<time>\d{1,2}:\d{2}\s*[AP]M)\s*(?P<city>.*?)\s*$")
+# re.M on every one of these: they are searched against a multi-line window, and
+# without it "$" means end-of-STRING, so a field only matched when its line
+# happened to be the last one in the window. That is why the same passenger
+# showed a flight time at one step and not at the other.
+TIME_CITY_RE = re.compile(r"Time/City:\s*(?P<time>\d{1,2}:\d{2}\s*[AP]M)\s*(?P<city>.*?)\s*$", re.M)
 APPT_RE = re.compile(r"Appointment time:\s*(?P<time>\d{1,2}:\d{2}\s*[AP]M)")
 ARRIVAL_TIME_RE = re.compile(r"Arrival time:\s*(?P<time>\d{1,2}:\d{2}\s*[AP]M)")
-DURATION_RE = re.compile(r"Duration:\s*(?P<dur>.+?)\s*$")
-ROUTE_RE = re.compile(r"Route:\s*(?P<route>.+?)\s*$")
-FLIGHT_RE = re.compile(r"Airline/Flight:\s*(?P<rest>.+?)\s*$")
+DURATION_RE = re.compile(r"Duration:\s*(?P<dur>.+?)\s*$", re.M)
+ROUTE_RE = re.compile(r"Route:\s*(?P<route>.+?)\s*$", re.M)
+FLIGHT_RE = re.compile(r"Airline/Flight:\s*(?P<rest>.+?)\s*$", re.M)
 # A per-passenger note: "I will be bringing a small cart with me",
 # "Cell is WhatsApp#". 76 of them, and the driver needs them.
 ENTITY_NOTE_RE = re.compile(r"Notes:\s*(?P<note>.+?)\s*$", re.M)
@@ -494,6 +498,40 @@ def place_code_of(stop):
     return label if SITE_CODE.match(label) else None
 
 
+# "Phone:" sits on its own line with the number wrapped onto the next, the same
+# shape as every other cell in this document. 1012 across the corpus.
+PHONE_RE = re.compile(r"(?P<phone>\+?\d[\d\-\(\)\. ]{7,}\d)")
+
+
+def entity_window(doc, row):
+    """The lines belonging to one passenger row: from the row itself up to the
+    next one.
+
+    A fixed-size window was wrong in both directions -- it could run past this
+    passenger into the next one's phone number, and it could stop short of this
+    passenger's own Time/City, which is why the same person showed a flight time
+    at one step and not at the other."""
+    starts = sorted(r["line"] for r in doc["rows"] if r.get("name"))
+    after = [s for s in starts if s > row["line"]]
+    end = after[0] if after else len(doc["lines"])
+    return "\n".join(doc["lines"][row["line"]:end])
+
+
+def entity_phone(doc, row):
+    """The passenger's number, or None.
+
+    Operationally required, not a nicety: assignments arrive at 5pm and the
+    driver has to reach every passenger before 9pm the night before, then again
+    from the kerb until they are in the car. A number the driver has to retype
+    from a PDF at 11pm is a number they will not use."""
+    window = entity_window(doc, row)
+    at = window.find("Phone:")
+    if at == -1:
+        return None
+    m = PHONE_RE.search(window[at:])
+    return " ".join(m.group("phone").split()) if m else None
+
+
 def leg_minutes(doc, dest_code):
     """Dispatch's own planned drive to `dest_code`, from this document.
 
@@ -750,6 +788,7 @@ def build_assignment(doc):
                         names.append(m["name"])
                 first = members[0]
                 tag = first.get("tag")
+                win = entity_window(doc, first)
                 entity = {
                     "name": party_label(names),
                     "pax": len(names),
@@ -758,7 +797,8 @@ def build_assignment(doc):
                 }
                 origin, dest = row_endpoints(first["raw"])
                 entity["origin"], entity["destination"] = origin, dest
-                note = ENTITY_NOTE_RE.search(first["window"])
+                entity["phone"] = entity_phone(doc, first)
+                note = ENTITY_NOTE_RE.search(win)
                 if note:
                     entity["note"] = note.group("note").strip()
 
@@ -775,17 +815,17 @@ def build_assignment(doc):
                     if not number and why not in ("non-flight-pickup",):
                         issues.append(f"{entity['name']}: could not resolve "
                                       f"{airline!r} ({why})")
-                    tc = TIME_CITY_RE.search(first["window"])
+                    tc = TIME_CITY_RE.search(win)
                     if tc:
                         entity["scheduledText"] = (
                             f"{tc.group('time').strip()} {tc.group('city').strip()}").strip()
-                am = APPT_RE.search(first["window"]) or ARRIVAL_TIME_RE.search(first["window"])
+                am = APPT_RE.search(win) or ARRIVAL_TIME_RE.search(win)
                 if am:
                     entity["appointmentTime"] = am.group("time").strip()
-                dur = DURATION_RE.search(first["window"])
+                dur = DURATION_RE.search(win)
                 if dur:
                     entity["duration"] = dur.group("dur").strip()
-                rt = ROUTE_RE.search(first["window"])
+                rt = ROUTE_RE.search(win)
                 if rt:
                     entity["route"] = rt.group("route").strip()
                 entities.append(entity)

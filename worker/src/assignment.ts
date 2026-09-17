@@ -38,6 +38,16 @@ export interface Entity {
   /** Shuttle rows. */
   route?: string | null;
 
+  /** The passenger's number, as printed. Operationally required: assignments
+   *  arrive at 5pm and the driver must reach every passenger before 9pm the
+   *  night before, then again from the kerb until they are in the car.
+   *
+   *  Null is a real and common value -- 61 of 411 entities in the sample have
+   *  none, and 29 of those have a `Phone:` label printed with nothing after it.
+   *  The UI should say there is no number rather than show an empty space,
+   *  because the driver still has to reach them somehow. */
+  phone?: string | null;
+
   bags?: number | null;
   /** Per-passenger note. 76 across the sample, and they change the work:
    *  "I will be bringing a small cart with me", "Cell is WhatsApp#". */

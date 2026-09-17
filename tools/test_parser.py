@@ -159,6 +159,35 @@ class Assignments(unittest.TestCase):
         self.assertEqual(lga["etaDate"], "2026-08-31")
         self.assertEqual(lga["date"], "2026-09-01")
 
+    def test_every_passenger_keeps_their_phone_number(self):
+        """Operationally required, not a nicety: assignments arrive at 5pm and
+        the driver must reach every passenger before 9pm the night before, then
+        again from the kerb until they are in the car. A number the driver has
+        to retype from a PDF at 11pm is a number they will not use."""
+        a = build_assignment(fixture("369736"))
+        entities = [e for s in a["steps"] for act in s["actions"]
+                    for e in act["entities"]]
+        self.assertTrue(entities)
+        for e in entities:
+            with self.subTest(e["name"]):
+                self.assertTrue(e.get("phone"), "no phone captured")
+
+    def test_a_field_resolves_the_same_at_every_step(self):
+        """Each pattern is searched against a MULTI-LINE window, so `$` without
+        re.M means end-of-string: a field only matched when its line happened to
+        be last in the window. The same passenger showed a flight time at one
+        step and not at the other."""
+        a = build_assignment(fixture("369736"))
+        seen = {}
+        for step in a["steps"]:
+            for act in step["actions"]:
+                for e in act["entities"]:
+                    prev = seen.setdefault(e["name"], e.get("scheduledText"))
+                    self.assertEqual(prev, e.get("scheduledText"),
+                                     f"{e['name']} differs between steps")
+                    self.assertTrue(e.get("scheduledText"),
+                                    f"{e['name']} lost its scheduled time")
+
     def test_the_header_fields_real_data_added(self):
         a = build_assignment(fixture("369736"))
         self.assertIn("Sienna", a["vehicle"])
