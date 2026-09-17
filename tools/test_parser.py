@@ -20,8 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from airlines import lookup  # noqa: E402
 from import_assignment import (  # noqa: E402
-    actions_in, build_jobs, code_for_place, dropoff_points, parse_assignment,
-    parse_flight, party_key, party_label, row_endpoints,
+    actions_in, build_jobs, code_for_place, dropoff_points, leg_minutes,
+    parse_assignment, parse_flight, party_key, party_label, row_endpoints,
 )
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -291,6 +291,41 @@ class Parties(unittest.TestCase):
         self.assertEqual(party_label(["Ruiz, Ana", "Ruiz, Ben", "Ruiz, Cleo"]),
                          "Ruiz, Ana, Ben & Cleo")
         self.assertEqual(party_label(["Ruiz, Ana"]), "Ruiz, Ana")
+
+
+class LegTimes(unittest.TestCase):
+    """Dispatch's own planned drive, taken from the document rather than a
+    table. It is where the table came from, it is specific to this run, and it
+    is the only answer for the four airports the table has no entry for."""
+
+    def test_leg_time_comes_from_the_document(self):
+        doc = fixture("369736")
+        self.assertEqual(leg_minutes(doc, "LGA"), 90, "FKL 9:30p -> LGA 11:00p")
+
+    def test_a_leg_spanning_midnight_is_not_discarded(self):
+        """LGA's stored date is anchored on its ETD (12:00 AM, which rolls to
+        the next day) while its ETA is 11:00 PM the night before. Subtracting
+        the dated values gave 1530 minutes and the leg was silently thrown away,
+        falling back to the table. Clock arithmetic with wraparound is correct
+        here because a leg is never more than a few hours."""
+        doc = fixture("369736")
+        lga = next(s for s in doc["stops"] if s["label"] == "LGA")
+        self.assertEqual(lga["eta"], "11:00 PM")
+        self.assertEqual(lga["etd"], "12:00 AM")
+        self.assertIsNotNone(leg_minutes(doc, "LGA"))
+        self.assertLessEqual(leg_minutes(doc, "LGA"), 300)
+
+    def test_the_document_wins_over_the_table(self):
+        doc, jobs, _ = jobs_of("369736")
+        flights = [j for j in jobs if j.get("flightNumber")]
+        self.assertTrue(flights)
+        for j in flights:
+            self.assertEqual(j["driveMinutes"], leg_minutes(doc, "LGA"))
+
+    def test_unknown_destination_yields_nothing(self):
+        doc = fixture("369736")
+        self.assertIsNone(leg_minutes(doc, "ALB"))
+        self.assertIsNone(leg_minutes(doc, None))
 
 
 class Flights(unittest.TestCase):

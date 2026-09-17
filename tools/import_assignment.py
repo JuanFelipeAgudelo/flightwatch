@@ -463,6 +463,48 @@ def place_code_of(stop):
     return label if SITE_CODE.match(label) else None
 
 
+def leg_minutes(doc, dest_code):
+    """Dispatch's own planned drive to `dest_code`, from this document.
+
+    The gap between the previous stop's ETD and this stop's ETA IS the travel
+    time dispatch allowed for that leg -- it is where the whole drive-time table
+    was derived from in the first place. Taken per-assignment it is strictly
+    better than the table: it is dispatch's number for this specific run, at
+    this time of day, rather than a median across months.
+
+    It is also the answer for the four airports with no table entry at all.
+    ALB, BDL, HPN and SWF never appear in the sample, so there is nothing to
+    derive -- but the moment an assignment goes to one, that document carries
+    its own timing and no lookup is needed."""
+    if not dest_code:
+        return None
+    stops = doc.get("stops") or []
+    for i, stop in enumerate(stops):
+        if i == 0 or stop.get("label") != dest_code or not stop.get("eta"):
+            continue
+        prev = stops[i - 1]
+        if not prev.get("etd"):
+            continue
+        # Clock arithmetic with wraparound, NOT the stops' resolved dates. A
+        # stop's date is anchored on whichever time drove the rollover walk, and
+        # for LGA in 369736 that is the ETD (12:00 AM, next day) while its ETA
+        # is 11:00 PM the night before. Subtracting the dated values gave 1530
+        # minutes and the leg was silently discarded. A leg is never more than a
+        # few hours, so wraparound is unambiguous and the dates are irrelevant.
+        arrive = parse_tod(stop["eta"])
+        depart = parse_tod(prev["etd"])
+        mins = ((arrive.hour * 60 + arrive.minute)
+                - (depart.hour * 60 + depart.minute))
+        if mins < 0:
+            mins += 1440
+        # An absurd gap means the stop order is not chronological, which Phase 0
+        # found does happen on multi-leg routes. Refuse rather than hand back a
+        # nonsense drive time.
+        if 0 < mins <= 300:
+            return mins
+    return None
+
+
 def stop_for_line(doc, line_no):
     prev = [s for s in doc["stops"] if s["line"] < line_no]
     return prev[-1] if prev else (doc["stops"][0] if doc["stops"] else None)
@@ -496,7 +538,12 @@ def build_jobs(doc):
         from_col, to_col = row_endpoints(row["raw"])
         wanted = from_col if kind == "arrival" else to_col
         dest_code = code_for_place(doc, wanted) or (stop or {}).get("label")
-        dm = drive_for(doc.get("origin"), dest_code)
+        # The document's own leg time wins: it is dispatch's number for this
+        # exact run. The derived table is the fallback, for a job typed in by
+        # hand where there is no assignment to ask.
+        dm = leg_minutes(doc, dest_code)
+        if dm is None:
+            dm = drive_for(doc.get("origin"), dest_code)
         if dm is not None:
             job["driveMinutes"] = dm
 
