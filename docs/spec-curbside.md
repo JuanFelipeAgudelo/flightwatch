@@ -114,6 +114,26 @@ on one scrolling page, never with navigation.
 | Editing | **No edit mode.** Dashed affordances where a thing would go; tap any value to change it. |
 | Undo | **In place and never expiring** — a removed step leaves a ghost row. No toast: five seconds to react at 2 AM is a promise the app cannot keep. |
 
+### Calling passengers — two surfaces, no lecture
+
+The phone number is operational data, not a nicety. The driver has to reach
+every passenger the evening before, and again from the kerb until they are in
+the car. A number that has to be retyped out of a PDF is a number nobody uses.
+
+**The evening call list.** When an assignment arrives, the app offers
+*"4 passengers to call"* — each row tap-to-dial, ticking off as you go.
+Passengers with **no number on file** are flagged rather than absent, because
+61 of 411 entities in the sample have none (29 of them have a `Phone:` label
+printed with nothing after it) and those are exactly the ones that otherwise
+slip through.
+
+**Tap-to-call from the itinerary row.** The same number, one tap, at the kerb.
+
+**No reminder text.** The app does not explain the deadline or restate the
+rule; the driver knows their own job. The list is the feature. Explaining it
+would be the app talking down to someone who has done this a thousand times —
+the same reason the GB rules strip was cut.
+
 ### Right Now belongs to the list, not the assignment
 
 Assignments can overlap. Two cards both claiming `IN PROGRESS` is exactly the
