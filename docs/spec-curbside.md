@@ -107,6 +107,34 @@ on one scrolling page, never with navigation.
 | Editing | **No edit mode.** Dashed affordances where a thing would go; tap any value to change it. |
 | Undo | **In place and never expiring** — a removed step leaves a ghost row. No toast: five seconds to react at 2 AM is a promise the app cannot keep. |
 
+### How a GB run is marked — settled
+
+One accent, spent once. The mark changes **shape**, never hue.
+
+| Where | What |
+|---|---|
+| Assignment card | A 4px brass bar down the left edge, vertical gradient (`#F5C071` → `#C4821F` night, `#F0B45A` → `#B9761A` day), **inset from the corners** |
+| Assignment card | A brass-outlined `GB` chip, in the same vocabulary as `SHIFT` and `MED` |
+| Right Now band | A `GOVERNING BODY` plate beside the `RIGHT NOW` eyebrow — near-black ground, brass text, 1px inset top highlight |
+| Everywhere else | Nothing. Steps, times and entities are identical to any other run. |
+
+The inset on the bar is load-bearing, not decoration: the **in-progress** card is
+a full 1px outline in the same brass, so a bar that touched the corners would
+read as a variant of it. A solid bar set *into* the edge is a different gesture,
+which is what lets it share the colour without borrowing the meaning.
+
+The stamp is **additive, never substitutive** — the eyebrow still reads
+`RIGHT NOW` on a GB run, so the band's anatomy never changes underneath the
+driver.
+
+Two things were tried and cut. A **platinum second accent** looked good in
+isolation and wrong in context: it split attention with the brass and made GB
+runs feel like a different product. A **rules strip** (curbside permitted, do
+not combine, approved drivers only) was rejected by the owner for the right
+reason — a GB-approved driver already knows the rules, and printing them back is
+a checklist for someone who needs one. Where a rule genuinely changes the work it
+appears *in* the work: the pickup line reads `Curbside — requested`.
+
 ### Right Now belongs to the list, not the assignment
 
 Assignments can overlap. Two cards both claiming `IN PROGRESS` is exactly the
