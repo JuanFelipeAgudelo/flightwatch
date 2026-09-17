@@ -92,7 +92,38 @@ START_RE = re.compile(
     r"Start date and time\s+(?P<start>" + _DATE + r")"
     r"\s+End date and time\s+(?P<end>" + _DATE + r")")
 FOOTER_RE = re.compile(r"(" + _DATE + r")\s+Page \d+ of \d+")
-NOTES_RE = re.compile(r"Driver notes\s+(?P<notes>.+?)\s*$", re.M)
+NOTES_LABEL_RE = re.compile(r"Driver notes[ \t]{2,}")
+# Where the notes block ends: the next titled section, or a stop row.
+NOTES_END_RE = re.compile(r"^\s*(Assistant|Passenger|\(Unavailable\))\b|ETA:|ETD:")
+
+
+def parse_notes(text):
+    """The notes cell, including its continuation lines.
+
+    Notes are a wrapped table cell, not a single line: 96 of 186 real
+    assignments run to several lines and 62 contain a time, some of them a full
+    timed itinerary. Reading only the first line silently truncated every one of
+    them -- and made "only 10% of notes have times" look true when it is 34%."""
+    m = NOTES_LABEL_RE.search(text)
+    if not m:
+        return None
+    lines = text[:m.start()].count("\n")
+    col = m.end() - (text.rfind("\n", 0, m.start()) + 1)
+    all_lines = text.split("\n")
+    out = [all_lines[lines][m.end() - (text.rfind("\n", 0, m.start()) + 1):].strip()]
+    for line in all_lines[lines + 1:]:
+        if not line.strip():
+            if len(out) > 1:
+                break
+            continue
+        if NOTES_END_RE.search(line):
+            break
+        # A continuation sits under the notes column; anything starting further
+        # left is a new field, not more notes.
+        if len(line) - len(line.lstrip()) < col - 6:
+            break
+        out.append(line.strip())
+    return "\n".join(x for x in out if x).strip() or None
 
 # "Parking space  WRK-RPG-BSMNT-065" -- the three-letter prefix is the site the
 # vehicle is parked at, which is where the driver's day starts. The value is
@@ -196,14 +227,22 @@ def parse_flight(rest):
 
 
 def parse_assignment(path):
-    text = extract(path)
+    """Parse a PDF. A `.txt` path is read as already-extracted layout text, which
+    is what the redacted fixtures are — so the test suite needs neither pypdf nor
+    the real documents."""
+    if path.lower().endswith(".txt"):
+        with open(path, encoding="utf-8") as fh:
+            return parse_text(fh.read(), os.path.basename(path))
+    return parse_text(extract(path), os.path.basename(path))
+
+
+def parse_text(text, source="<text>"):
     hm = HEADER_RE.search(text)
     sm = START_RE.search(text)
     if not hm or not sm:
         return None
     lines = text.split("\n")
     footers = FOOTER_RE.findall(text)
-    notes = NOTES_RE.search(text)
 
     park = PARKING_RE.search(text)
     park_code = park.group("code").strip() if park else None
@@ -217,8 +256,8 @@ def parse_assignment(path):
         "start": parse_dt(sm.group("start")),
         "end": parse_dt(sm.group("end")),
         "printed": parse_dt(footers[-1]) if footers else None,
-        "driver_notes": notes.group("notes").strip() if notes else None,
-        "source": os.path.basename(path),
+        "driver_notes": parse_notes(text),
+        "source": source,
     }
 
     # --- stops, with dates resolved by walking the clock forward -------------
@@ -497,6 +536,7 @@ def collect(paths):
     for p in paths:
         if os.path.isdir(p):
             out += sorted(glob.glob(os.path.join(p, "*.pdf")))
+            out += sorted(glob.glob(os.path.join(p, "*.txt")))
         else:
             out.append(p)
     return out
