@@ -85,8 +85,15 @@ export interface Step {
   /** Wall-clock as printed. A first step has no eta; a last step has no etd. */
   eta?: string | null;
   etd?: string | null;
-  /** Resolved calendar date, walked forward across midnight. */
+  /** Resolved calendar date of the DEPARTURE (etd), walked forward across
+   *  midnight. The itinerary is ordered by this. */
   date: string; // YYYY-MM-DD
+  /** Resolved date of the ARRIVAL (eta), which is not always the same day.
+   *  LGA in 369736 is reached at 11:00 PM and left at 12:00 AM, so its eta is
+   *  the 31st and its etd the 1st. Anything about arriving -- a flight's date
+   *  above all -- must use this, or the flight is tracked a day out and never
+   *  resolves. */
+  etaDate?: string; // YYYY-MM-DD
   actions: Action[];
 }
 
@@ -187,13 +194,18 @@ export function flightsOf(assignment: Assignment): { flightNumber: string; date:
   const seen = new Set<string>();
   const out: { flightNumber: string; date: string }[] = [];
   for (const step of assignment.steps) {
+    // A flight belongs to the day it ARRIVES, which is not always the day the
+    // driver leaves that stop. Using step.date here tracked an overnight
+    // flight a day out, and a flight tracked on the wrong date never resolves
+    // and never says why.
+    const date = step.etaDate ?? step.date;
     for (const action of step.actions) {
       for (const entity of action.entities) {
         if (!entity.flightNumber) continue;
-        const key = `${entity.flightNumber}:${step.date}`;
+        const key = `${entity.flightNumber}:${date}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ flightNumber: entity.flightNumber, date: step.date });
+        out.push({ flightNumber: entity.flightNumber, date });
       }
     }
   }

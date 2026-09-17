@@ -1023,6 +1023,23 @@ def main():
             print(f"\nwrote {DRIVE_TIMES_PATH} ({len(pair_table)} origin-aware pairs)")
         return
 
+    if args.assignments or args.post_assignment:
+        for d in docs:
+            assignment = build_assignment(d)
+            if args.post_assignment:
+                status, resp = post_assignment(args.post_assignment, assignment)
+                applied = resp.get("applied")
+                note = ("replaced an older copy" if resp.get("replaced") else "new")
+                if not applied:
+                    note = resp.get("reason", "not applied")
+                print(f"  {assignment['number']}  HTTP {status}  {note}"
+                      f"  ({resp.get('flightsTracked', 0)} flight(s) tracked)")
+            else:
+                print(json.dumps(assignment, indent=2))
+            for issue in assignment["issues"]:
+                print(f"     ! {issue}", file=sys.stderr)
+        return 0
+
     if args.audit:
         kinds, issues_all, with_jobs = {}, [], 0
         for d in docs:
