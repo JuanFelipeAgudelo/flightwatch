@@ -285,5 +285,33 @@ export function ntfyTopicFor(listCode: string): string {
   return `flightwatch-${listCode}`;
 }
 
-// Deduped union of every flight anyone is tracking — the set cron actually polls.
+// The set cron polls: ONE KEY PER FLIGHT, listed by prefix.
+//
+// This used to be a single `all-tracked-flights` key holding the whole array,
+// which every add and every remove rewrote via read-modify-write. Workers KV
+// has no compare-and-swap and its reads are eventually consistent, so two adds
+// close together can both read the same array and the second write silently
+// drops the first — the flight stays on the user's list, shows the status from
+// its add-time fetch, and is never polled again. Nothing surfaces the loss.
+//
+// A key per flight removes the shared write entirely: an add is one put, a
+// remove is one delete, and they cannot interfere. Cron lists the prefix
+// instead of reading an array.
+export const POLL_PREFIX = "poll:";
+
+export function pollKey(flight: FlightRef): string {
+  return `${POLL_PREFIX}${flight.flightNumber}:${flight.date}`;
+}
+
+/** The inverse of pollKey. A flight number never contains ":", and the date is
+ *  always the final segment, so splitting on the LAST colon is unambiguous. */
+export function flightFromPollKey(key: string): FlightRef | null {
+  const rest = key.startsWith(POLL_PREFIX) ? key.slice(POLL_PREFIX.length) : key;
+  const at = rest.lastIndexOf(":");
+  if (at <= 0 || at === rest.length - 1) return null;
+  return { flightNumber: rest.slice(0, at), date: rest.slice(at + 1) };
+}
+
+/** The retired shared key. Read once on the next cron tick to migrate whatever
+ *  it still holds into per-flight keys, then deleted. */
 export const ALL_TRACKED_KEY = "all-tracked-flights";

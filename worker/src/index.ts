@@ -2,6 +2,9 @@ import { diffFlightStatus, fetchFlightStatus } from "./aerodatabox";
 import { sendNtfyNotification } from "./ntfy";
 import {
   ALL_TRACKED_KEY,
+  POLL_PREFIX,
+  pollKey,
+  flightFromPollKey,
   DEFAULT_SETTINGS,
   DONE_POLLING,
   resolveSettings,
@@ -81,12 +84,36 @@ async function saveList(env: Env, code: string, data: ListData): Promise<void> {
   return putJSON(env, listKey(code), data);
 }
 
+/** Every flight in the poll set, by listing the prefix. Pages through the
+ *  cursor: KV returns at most 1000 keys per call, and at 238 assignments a day
+ *  that ceiling is reachable. */
 async function getAllTracked(env: Env): Promise<FlightRef[]> {
-  return getJSON<FlightRef[]>(env, ALL_TRACKED_KEY, []);
+  const out: FlightRef[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await env.FLIGHT_DATA.list({ prefix: POLL_PREFIX, cursor });
+    for (const key of page.keys) {
+      const flight = flightFromPollKey(key.name);
+      if (flight) out.push(flight);
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return out;
 }
 
-async function saveAllTracked(env: Env, flights: FlightRef[]): Promise<void> {
-  return putJSON(env, ALL_TRACKED_KEY, flights);
+/** One-shot migration off the retired shared array. Runs on a cron tick, costs
+ *  one read when the key is gone, and deletes it once its contents are per-flight
+ *  keys. Safe to run repeatedly. */
+async function migrateSharedPollSet(env: Env): Promise<number> {
+  const legacy = await getJSON<FlightRef[] | null>(env, ALL_TRACKED_KEY, null);
+  if (!legacy) return 0;
+  for (const flight of legacy) {
+    if (flight?.flightNumber && flight?.date) {
+      await putJSON(env, pollKey(flight), flight);
+    }
+  }
+  await env.FLIGHT_DATA.delete(ALL_TRACKED_KEY);
+  return legacy.length;
 }
 
 async function getTrackers(env: Env, flight: FlightRef): Promise<string[]> {
@@ -102,20 +129,15 @@ async function saveTrackers(env: Env, flight: FlightRef, codes: string[]): Promi
   }
 }
 
+// One put, one delete. Idempotent, and no read-modify-write to lose. The value
+// repeats the ref so the key is self-describing when read by hand; listing only
+// returns names, so nothing depends on it.
 async function addToAllTracked(env: Env, flight: FlightRef): Promise<void> {
-  const all = await getAllTracked(env);
-  if (!all.some((f) => sameFlight(f, flight))) {
-    all.push(flight);
-    await saveAllTracked(env, all);
-  }
+  await putJSON(env, pollKey(flight), flight);
 }
 
 async function removeFromAllTracked(env: Env, flight: FlightRef): Promise<void> {
-  const all = await getAllTracked(env);
-  const remaining = all.filter((f) => !sameFlight(f, flight));
-  if (remaining.length !== all.length) {
-    await saveAllTracked(env, remaining);
-  }
+  await env.FLIGHT_DATA.delete(pollKey(flight));
 }
 
 // Drops a flight from the global poll set once nobody's list references it anymore,
@@ -437,6 +459,11 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+    const migrated = await migrateSharedPollSet(env);
+    if (migrated) {
+      console.log(`Migrated ${migrated} flight(s) off the shared poll key`);
+    }
+
     const tracked = await getAllTracked(env);
     const now = Date.now();
 
