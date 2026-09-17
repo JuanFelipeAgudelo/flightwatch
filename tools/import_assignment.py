@@ -133,6 +133,12 @@ def parse_notes(text):
 # space of "Driver notes" or "Sprinter 350".
 PARKING_RE = re.compile(r"Parking space[ \t]+(?P<code>\S[^\n]*?)[ \t]*$", re.M)
 
+# "Vehicle   Branch (72398) 2020 Toyota Sienna (7 Seats)   Parking space  ..."
+# Present in 183 of 186 assignments, and what the driver needs when collecting
+# the van. Stops at the two-space gap before the next column, so it never eats
+# the parking space beside it.
+VEHICLE_RE = re.compile(r"Vehicle[ \t]{2,}(?P<v>\S[^\n]*?)[ \t]{2,}\S", re.M)
+
 # "WKL   ETA: 10:00 AM   ETD: 10:00 AM   Wallkill | 900 Red Mills Rd."
 STOP_RE = re.compile(
     r"^\s*(?P<label>\S.*?)\s{2,}ETA:\s*(?P<eta>\d{1,2}:\d{2}\s*[AP]M)?\s*"
@@ -147,6 +153,9 @@ ARRIVAL_TIME_RE = re.compile(r"Arrival time:\s*(?P<time>\d{1,2}:\d{2}\s*[AP]M)")
 DURATION_RE = re.compile(r"Duration:\s*(?P<dur>.+?)\s*$")
 ROUTE_RE = re.compile(r"Route:\s*(?P<route>.+?)\s*$")
 FLIGHT_RE = re.compile(r"Airline/Flight:\s*(?P<rest>.+?)\s*$")
+# A per-passenger note: "I will be bringing a small cart with me",
+# "Cell is WhatsApp#". 76 of them, and the driver needs them.
+ENTITY_NOTE_RE = re.compile(r"Notes:\s*(?P<note>.+?)\s*$", re.M)
 PICKUP_RE = re.compile(r"^\s*(Pickup|Drop-off)\s*:\s*(?P<detail>.*?)\s*$")
 
 # Trailing "  1" / "  2" is the Bags column bleeding into the Information cell.
@@ -252,6 +261,8 @@ def parse_text(text, source="<text>"):
         "assignment": hm.group("num"),
         "parking": park_code,
         "origin": origin,
+        "vehicle": (VEHICLE_RE.search(text).group("v").strip()
+                    if VEHICLE_RE.search(text) else None),
         "driver": hm.group("driver").strip(),
         "start": parse_dt(sm.group("start")),
         "end": parse_dt(sm.group("end")),
@@ -273,20 +284,40 @@ def parse_text(text, source="<text>"):
         if not m:
             continue
         label = m.group("label").strip()
-        tod = None
-        for fld in ("etd", "eta"):
-            if m.group(fld):
-                tod = parse_tod(m.group(fld))
-                break
-        if tod is not None:
+
+        # ARRIVING and LEAVING can fall on different days. LGA in 369736 is
+        # reached at 11:00 PM and left at 12:00 AM, so its eta belongs to the
+        # 31st and its etd to the 1st. Anchoring the whole stop on one of them
+        # dated the other wrongly -- and since a flight's date came from the
+        # stop, the flight was tracked a day out and would never have resolved.
+        # So walk both times in document order and keep both dates.
+        eta_date = etd_date = cur_date
+        for fld in ("eta", "etd"):
+            raw = m.group(fld)
+            if not raw:
+                continue
+            tod = parse_tod(raw)
             if last_tod is not None and tod < last_tod:
                 cur_date += timedelta(days=1)
             last_tod = tod
+            if fld == "eta":
+                eta_date = cur_date
+            else:
+                etd_date = cur_date
+        if not m.group("eta"):
+            eta_date = etd_date
+        if not m.group("etd"):
+            etd_date = eta_date
+
         stops.append({
             "line": i, "label": label,
             "eta": m.group("eta"), "etd": m.group("etd"),
             "place": m.group("place").strip() or label,
-            "date": cur_date,
+            "addr": (m.group("addr") or "").strip() or None,
+            # `date` stays the departure date, which is what the itinerary is
+            # ordered by; `etaDate` is what anything about arriving must use.
+            "date": etd_date,
+            "etaDate": eta_date,
         })
 
     doc["date_ok"] = (not stops) or stops[-1]["date"] == doc["end"].date()
@@ -525,7 +556,10 @@ def build_jobs(doc):
             continue
 
         stop = stop_for_line(doc, row["line"])
-        date = (stop or {}).get("date") or doc["start"].date()
+        # A flight belongs to the day it ARRIVES, which is not always the day
+        # the driver leaves that stop -- see the etaDate comment in parse_text.
+        date = ((stop or {}).get("etaDate") or (stop or {}).get("date")
+                or doc["start"].date())
         job = {"passenger": row["name"], "note": None}
         # The drive is from where the vehicle is parked to where this job is,
         # not from a fixed base -- a quarter of these assignments start at
@@ -655,6 +689,155 @@ def build_jobs(doc):
     return jobs, issues
 
 
+ASSISTANT_HEAD = re.compile(r"^\s*Assistant\s{2,}Role\b")
+
+
+def parse_assistants(doc):
+    """The Assistant / Role / Notes table. Present in 48 of 186 assignments --
+    Helper 13, Trainer 10, Other 7 -- and a run with a trainer aboard is a
+    different shift from driving alone."""
+    lines = doc["lines"]
+    start = next((i for i, l in enumerate(lines) if ASSISTANT_HEAD.match(l)), None)
+    if start is None:
+        return []
+    out = []
+    for line in lines[start + 1:]:
+        if not line.strip():
+            if out:
+                break
+            continue
+        if STOP_RE.match(line) or "ETA:" in line:
+            break
+        parts = [p for p in re.split(r"\s{2,}", line.strip()) if p]
+        if not parts or not re.match(r"^[A-Z][A-Za-z'\-]+,", parts[0]):
+            break
+        out.append({"name": parts[0],
+                    "role": parts[1] if len(parts) > 1 else None,
+                    "note": parts[2] if len(parts) > 2 else None})
+    return out
+
+
+def build_assignment(doc):
+    """The full four-level record: Assignment -> Step -> Action -> Entity.
+
+    The flat job list this replaces could not hold an itinerary: a passenger
+    appears at their pickup AND at their own drop-off, and dedupe threw the
+    second away. That second appearance is the other half of the work."""
+    doors = dropoff_points(doc)
+    acts = actions_in(doc)
+    total = len(doc["lines"])
+    issues = []
+    steps = []
+
+    for i, stop in enumerate(doc["stops"]):
+        nxt = doc["stops"][i + 1]["line"] if i + 1 < len(doc["stops"]) else total
+        here = [a for a in acts if stop["line"] < a[0] < nxt]
+        actions = []
+        for n, (line_no, verb, where) in enumerate(here):
+            end = here[n + 1][0] if n + 1 < len(here) else nxt
+            rows = [r for r in doc["rows"]
+                    if line_no < r["line"] < end and r.get("name")]
+            groups = {}
+            for row in rows:
+                groups.setdefault(party_key(doc, row, doors), []).append(row)
+
+            entities = []
+            for members in groups.values():
+                names, seen = [], set()
+                for m in members:
+                    if m["name"] not in seen:
+                        seen.add(m["name"])
+                        names.append(m["name"])
+                first = members[0]
+                tag = first.get("tag")
+                entity = {
+                    "name": party_label(names),
+                    "pax": len(names),
+                    "tag": tag,
+                    "gb": bool(tag and tag.startswith("GB")),
+                }
+                origin, dest = row_endpoints(first["raw"])
+                entity["origin"], entity["destination"] = origin, dest
+                note = ENTITY_NOTE_RE.search(first["window"])
+                if note:
+                    entity["note"] = note.group("note").strip()
+
+                if tag in EXCLUDED_TAGS:
+                    entity["unsupported"] = EXCLUDED_TAGS[tag]
+                    issues.append(f"{tag} row not yet supported: {entity['name']}")
+                    entities.append(entity)
+                    continue
+
+                fm = FLIGHT_RE.search(first["raw"])
+                if fm:
+                    number, airline, why = parse_flight(fm.group("rest"))
+                    entity["flightNumber"] = number
+                    if not number and why not in ("non-flight-pickup",):
+                        issues.append(f"{entity['name']}: could not resolve "
+                                      f"{airline!r} ({why})")
+                    tc = TIME_CITY_RE.search(first["window"])
+                    if tc:
+                        entity["scheduledText"] = (
+                            f"{tc.group('time').strip()} {tc.group('city').strip()}").strip()
+                am = APPT_RE.search(first["window"]) or ARRIVAL_TIME_RE.search(first["window"])
+                if am:
+                    entity["appointmentTime"] = am.group("time").strip()
+                dur = DURATION_RE.search(first["window"])
+                if dur:
+                    entity["duration"] = dur.group("dur").strip()
+                rt = ROUTE_RE.search(first["window"])
+                if rt:
+                    entity["route"] = rt.group("route").strip()
+                entities.append(entity)
+
+            actions.append({"verb": verb.title(), "where": where or None,
+                            "entities": entities})
+
+        steps.append({
+            "code": place_code_of(stop),
+            "place": stop.get("place") or stop.get("label"),
+            "address": stop.get("addr") or None,
+            "eta": stop.get("eta"), "etd": stop.get("etd"),
+            "date": stop["date"].isoformat(),
+            "etaDate": stop.get("etaDate", stop["date"]).isoformat(),
+            "actions": actions,
+        })
+
+    if not doc["date_ok"]:
+        issues.append("last stop date disagrees with the document's stated end date "
+                      "-- check the multi-day rollover")
+
+    gb = any(e.get("gb") for s in steps for a in s["actions"] for e in a["entities"])
+    return {
+        "number": doc["assignment"],
+        "start": doc["start"].strftime("%Y-%m-%d %H:%M"),
+        "end": doc["end"].strftime("%Y-%m-%d %H:%M"),
+        "driver": doc.get("driver"),
+        "vehicle": doc.get("vehicle"),
+        "parking": doc.get("parking"),
+        "originCode": doc.get("origin"),
+        "driverNotes": doc.get("driver_notes"),
+        "assistants": parse_assistants(doc),
+        "steps": steps,
+        "gb": gb,
+        "issues": issues,
+        "printedAt": doc["printed"].strftime("%Y-%m-%d %H:%M") if doc.get("printed") else None,
+        "source": doc.get("source"),
+    }
+
+
+def post_assignment(list_code, assignment):
+    body = dict(assignment)
+    body["listCode"] = list_code
+    req = urllib.request.Request(
+        f"{API}/api/assignments", method="POST",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json",
+                 "User-Agent": "flightwatch-import/1.0"})
+    with urllib.request.urlopen(req) as r:
+        return r.status, json.loads(r.read().decode())
+
+
 def post_job(list_code, job):
     body = dict(job)
     body["listCode"] = list_code
@@ -687,6 +870,10 @@ def main():
     ap.add_argument("paths", nargs="+")
     ap.add_argument("--post", metavar="LIST_CODE")
     ap.add_argument("--audit", action="store_true")
+    ap.add_argument("--assignments", action="store_true",
+                    help="emit the full Assignment hierarchy instead of flat jobs")
+    ap.add_argument("--post-assignment", metavar="LIST_CODE",
+                    help="import assignments into a list")
     ap.add_argument("--drive-times", action="store_true",
                     help="derive a driveMinutes table from scheduled stop gaps")
     ap.add_argument("--save", action="store_true",
