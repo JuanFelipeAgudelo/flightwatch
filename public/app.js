@@ -27,10 +27,15 @@ let density = localStorage.getItem(LS_DENSITY) === "card" ? "card" : "board";
 let themeMode = localStorage.getItem(LS_THEME) || "auto"; // auto | night | day
 
 // Mirrors the Worker's DEFAULT_SETTINGS, which follow the department's written
-// guidelines: arrive 15m before a landing, 1.5h/2h check-in for a departure.
+// guidelines: arrive 15m before a landing, and "passengers should arrive at
+// least 2 hours before their flight departs" domestic, 3 hours international.
+// The 1.5h/2h figures in the same manual are TSA Pre-Check guidance, not the
+// rule, and shipping them as the default told drivers to leave half an hour
+// late. Only the Worker's values are authoritative; these are the fallback
+// before settings arrive.
 const DEFAULT_SETTINGS = {
   driveMinutes: {}, bufferMinutes: 15,
-  checkInLeadMinutes: 90, checkInLeadIntlMinutes: 120,
+  checkInLeadMinutes: 120, checkInLeadIntlMinutes: 180,
   showPassengerNames: true,
 };
 let settings = { ...DEFAULT_SETTINGS };
@@ -306,8 +311,8 @@ function checkInLeadFor(entry) {
   // Unknown falls to the longer lead: leaving early costs waiting, leaving
   // late costs the flight.
   return isInternational(entry) === false
-    ? (settings.checkInLeadMinutes ?? 90)
-    : (settings.checkInLeadIntlMinutes ?? 120);
+    ? (settings.checkInLeadMinutes ?? 120)
+    : (settings.checkInLeadIntlMinutes ?? 180);
 }
 
 // How long after touchdown before the passenger is actually in the car. The
