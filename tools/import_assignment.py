@@ -111,10 +111,22 @@ def parse_notes(text):
     col = m.end() - (text.rfind("\n", 0, m.start()) + 1)
     all_lines = text.split("\n")
     out = [all_lines[lines][m.end() - (text.rfind("\n", 0, m.start()) + 1):].strip()]
+    # Blank lines occur INSIDE the notes -- dispatch separates paragraphs with
+    # them. Breaking at the first one truncated the block and lost real
+    # operational detail: 345852 kept an address and dropped the line after it,
+    # "Drop off location: Main parking lot stairs in between the two buildings",
+    # which is precisely what a driver needs at 5am.
+    #
+    # So blanks are allowed through. The block ends at a titled section or a
+    # stop row, at a line indented further left than the notes column, or at a
+    # run of blank lines long enough to mean the cell is over.
+    blanks = 0
     for line in all_lines[lines + 1:]:
         if not line.strip():
-            if len(out) > 1:
+            blanks += 1
+            if blanks >= 3 and out:
                 break
+            out.append("")
             continue
         if NOTES_END_RE.search(line):
             break
@@ -122,8 +134,12 @@ def parse_notes(text):
         # left is a new field, not more notes.
         if len(line) - len(line.lstrip()) < col - 6:
             break
+        blanks = 0
         out.append(line.strip())
-    return "\n".join(x for x in out if x).strip() or None
+    # Collapse the runs of blanks we let through, and drop any trailing ones.
+    text = "\n".join(out)
+    text = re.sub(r"\n{2,}", "\n", text).strip()
+    return text or None
 
 # "Parking space  WRK-RPG-BSMNT-065" -- the three-letter prefix is the site the
 # vehicle is parked at, which is where the driver's day starts. The value is
@@ -807,6 +823,13 @@ def build_assignment(doc):
                     issues.append(f"{tag} row not yet supported: {entity['name']}")
                     entities.append(entity)
                     continue
+
+                # Bags: the trailing column strip_bags already finds and then
+                # discarded. It decides whether a party fits the vehicle, so it
+                # is not decoration.
+                _rest, bags = strip_bags(first["raw"])
+                if bags is not None:
+                    entity["bags"] = bags
 
                 fm = FLIGHT_RE.search(first["raw"])
                 if fm:
