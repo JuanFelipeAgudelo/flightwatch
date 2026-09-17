@@ -31,6 +31,11 @@ export interface Entity {
   /** The scheduled time and city as printed, kept even when the flight number
    *  could not be resolved, because it is still useful to a driver. */
   scheduledText?: string | null;
+  /** The date the flight itself operates, pinned at import to the AIRPORT step.
+   *  A passenger appears at two steps -- the airport and their own door -- and
+   *  once those fall on different days, keying on the enclosing step tracked
+   *  the same flight twice, on two dates, with half of it never resolving. */
+  flightDate?: string | null;
 
   /** Fixed-time rows: medical appointments, embassy arrivals. */
   appointmentTime?: string | null;
@@ -198,10 +203,14 @@ export function flightsOf(assignment: Assignment): { flightNumber: string; date:
     // driver leaves that stop. Using step.date here tracked an overnight
     // flight a day out, and a flight tracked on the wrong date never resolves
     // and never says why.
-    const date = step.etaDate ?? step.date;
+    const stepDate = step.etaDate ?? step.date;
     for (const action of step.actions) {
       for (const entity of action.entities) {
         if (!entity.flightNumber) continue;
+        // The flight's own date, pinned at import to the airport step. Falling
+        // back to the enclosing step is what caused one flight to be tracked
+        // as two.
+        const date = entity.flightDate ?? stepDate;
         const key = `${entity.flightNumber}:${date}`;
         if (seen.has(key)) continue;
         seen.add(key);
