@@ -38,6 +38,16 @@ export interface Entity {
   /** Shuttle rows. */
   route?: string | null;
 
+  /** The passenger's number, as printed. Operationally required: assignments
+   *  arrive at 5pm and the driver must reach every passenger before 9pm the
+   *  night before, then again from the kerb until they are in the car.
+   *
+   *  Null is a real and common value -- 61 of 411 entities in the sample have
+   *  none, and 29 of those have a `Phone:` label printed with nothing after it.
+   *  The UI should say there is no number rather than show an empty space,
+   *  because the driver still has to reach them somehow. */
+  phone?: string | null;
+
   bags?: number | null;
   /** Per-passenger note. 76 across the sample, and they change the work:
    *  "I will be bringing a small cart with me", "Cell is WhatsApp#". */
@@ -75,8 +85,15 @@ export interface Step {
   /** Wall-clock as printed. A first step has no eta; a last step has no etd. */
   eta?: string | null;
   etd?: string | null;
-  /** Resolved calendar date, walked forward across midnight. */
+  /** Resolved calendar date of the DEPARTURE (etd), walked forward across
+   *  midnight. The itinerary is ordered by this. */
   date: string; // YYYY-MM-DD
+  /** Resolved date of the ARRIVAL (eta), which is not always the same day.
+   *  LGA in 369736 is reached at 11:00 PM and left at 12:00 AM, so its eta is
+   *  the 31st and its etd the 1st. Anything about arriving -- a flight's date
+   *  above all -- must use this, or the flight is tracked a day out and never
+   *  resolves. */
+  etaDate?: string; // YYYY-MM-DD
   actions: Action[];
 }
 
@@ -177,13 +194,18 @@ export function flightsOf(assignment: Assignment): { flightNumber: string; date:
   const seen = new Set<string>();
   const out: { flightNumber: string; date: string }[] = [];
   for (const step of assignment.steps) {
+    // A flight belongs to the day it ARRIVES, which is not always the day the
+    // driver leaves that stop. Using step.date here tracked an overnight
+    // flight a day out, and a flight tracked on the wrong date never resolves
+    // and never says why.
+    const date = step.etaDate ?? step.date;
     for (const action of step.actions) {
       for (const entity of action.entities) {
         if (!entity.flightNumber) continue;
-        const key = `${entity.flightNumber}:${step.date}`;
+        const key = `${entity.flightNumber}:${date}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ flightNumber: entity.flightNumber, date: step.date });
+        out.push({ flightNumber: entity.flightNumber, date });
       }
     }
   }
